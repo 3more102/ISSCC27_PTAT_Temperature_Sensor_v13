@@ -115,11 +115,24 @@ def run_sample(
     return csv_path
 
 
-def candidate_metrics(result: dict) -> dict:
+def candidate_metrics(result: dict, files: list[Path]) -> dict:
     samples = result["per_sample"]
     branch = [x["max_branch_mismatch_percent"] for x in samples]
     power = [x["max_power_uw"] for x in samples]
+    design = run_sky130.load_design()
+    vdd = float(design["nominal_characterization_seed"]["vdd_v"])
+    headroom_target = float(design["headroom_guardband_v_min"])
+    headroom = min(
+        min(
+            vdd - max(row["vgs_small_v"], row["vgs_large_v"])
+            for row in mismatch_mc.read_rows(path)
+        )
+        for path in files
+    )
     return {
+        "headroom_pass": headroom >= headroom_target,
+        "min_sensor_headroom_v": headroom,
+        "headroom_target_v": headroom_target,
         "error_yield_percent": result["yield_percent_error_le_target"],
         "branch_yield_percent": result[
             "yield_percent_branch_mismatch_le_target"
@@ -207,7 +220,7 @@ def main() -> int:
                             "mirror_area_scale": mirror_scale**2,
                             "sensor_linear_scale": sensor_scale,
                             "sensor_area_scale": sensor_scale**2,
-                            **candidate_metrics(result),
+                            **candidate_metrics(result, files),
                         }
                     )
     except Exception as exc:
@@ -239,6 +252,8 @@ def main() -> int:
     best = ranked[0]
     print("MISMATCH SIZING SWEEP: COMPLETE")
     print("best candidate:", best["candidate"])
+    print("headroom pass:", best["headroom_pass"])
+    print("minimum sensor headroom (V):", best["min_sensor_headroom_v"])
     print("branch yield (%):", best["branch_yield_percent"])
     print("error yield (%):", best["error_yield_percent"])
     print("p95 max error (C):", best["p95_max_error_c"])
