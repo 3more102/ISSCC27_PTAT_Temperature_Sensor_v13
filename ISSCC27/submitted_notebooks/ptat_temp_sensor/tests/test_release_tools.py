@@ -10,6 +10,7 @@ import full_pdk_evidence_audit
 import pdk_calibration_analysis
 import readout_budget
 import run_sky130
+import sizing_candidate_qualification
 import mismatch_sizing_study
 
 
@@ -149,3 +150,99 @@ def test_sky130_runner_supports_independent_sensor_and_mirror_scaling():
     assert mirror["l_um"] == 24.0
     assert mirror["w_um"] == 96.0
 
+
+
+def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
+    selected = {
+        "candidate": "i10_m8_s2",
+        "iref_scale": 10.0,
+        "mirror_linear_scale": 8.0,
+        "sensor_linear_scale": 2.0,
+        "headroom_pass": True,
+    }
+    validation = {
+        "candidate": "i10_m8_s2",
+        "status": "PASS",
+        "samples": 100,
+        "seed_start": 9001,
+        "error_yield_percent": 97.0,
+        "branch_yield_percent": 96.0,
+        "headroom_pass": True,
+    }
+    sweep = {
+        "recommended_for_independent_validation": selected,
+        "independent_validation": validation,
+    }
+    metadata = {
+        "sensor_linear_scale": 2.0,
+        "mirror_linear_scale": 8.0,
+        "operating_point": {
+            "reference_current_a": 1.0e-6,
+            "branch_current_a": 1.0e-6,
+            "vdd_v": 1.8,
+        },
+    }
+    dense = {
+        "status": "PASS",
+        "anchors_c": [-40, -20, 0, 50, 125],
+        "worst_pwl_max_abs_error_c": 0.45,
+        "worst_five_point_pwl_max_abs_error_c": 0.45,
+        "worst_mirror_branch_mismatch_percent": 0.8,
+    }
+
+    result = sizing_candidate_qualification.analyze(
+        sweep, dense, metadata, 1.0e-7
+    )
+    assert result["status"] == "QUALIFIED_FOR_RELEASE_REVIEW"
+    assert result["qualified_for_release_review"] is True
+    assert result["release_architecture_changed"] is False
+
+    dense["status"] = "FAIL"
+    result = sizing_candidate_qualification.analyze(
+        sweep, dense, metadata, 1.0e-7
+    )
+    assert result["status"] == "NOT_QUALIFIED_FOR_RELEASE_REVIEW"
+    assert result["qualified_for_release_review"] is False
+
+
+def test_sizing_candidate_qualification_rejects_evidence_mismatch():
+    sweep = {
+        "recommended_for_independent_validation": {
+            "candidate": "i1_m4_s2",
+            "iref_scale": 1.0,
+            "mirror_linear_scale": 4.0,
+            "sensor_linear_scale": 2.0,
+            "headroom_pass": True,
+        },
+        "independent_validation": {
+            "candidate": "i1_m4_s2",
+            "status": "PASS",
+            "samples": 100,
+            "seed_start": 9001,
+            "error_yield_percent": 100.0,
+            "branch_yield_percent": 100.0,
+            "headroom_pass": True,
+        },
+    }
+    metadata = {
+        "sensor_linear_scale": 2.0,
+        "mirror_linear_scale": 8.0,
+        "operating_point": {
+            "reference_current_a": 1.0e-7,
+            "branch_current_a": 1.0e-7,
+            "vdd_v": 1.8,
+        },
+    }
+    dense = {
+        "status": "PASS",
+        "anchors_c": [-40, -20, 0, 50, 125],
+        "worst_five_point_pwl_max_abs_error_c": 0.4,
+        "worst_mirror_branch_mismatch_percent": 0.5,
+    }
+    with __import__("pytest").raises(
+        sizing_candidate_qualification.QualificationError,
+        match="mirror linear scale",
+    ):
+        sizing_candidate_qualification.analyze(
+            sweep, dense, metadata, 1.0e-7
+        )
