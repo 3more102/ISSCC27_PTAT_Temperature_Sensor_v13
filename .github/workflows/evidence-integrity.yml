@@ -1,0 +1,25 @@
+name: Evidence Integrity
+
+on:
+  push:
+    branches:
+      - main
+      - "work/**"
+  pull_request:
+
+jobs:
+  evidence-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify retained SKY130 evidence
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+        run: python evidence_audit.py
