@@ -86,12 +86,12 @@ def render(mode: str, corner: str, temps: list[float], output_rel: str, model_li
         "__VDDVAL__": str(seed["vdd_v"]),
         "__IBIAS__": str(seed["branch_current_a"]),
         "__IREF__": str(seed["reference_current_a"]),
-        "__LCH__": str(seed["sensor_nmos"]["l_um"])+"u",
+        "__LCH__": str(seed["sensor_nmos"]["l_um"]),
         "__LNS__": str(seed["sensor_nmos"]["l_um"])+"u",
-        "__W1__": str(seed["sensor_nmos"]["w_small_um"])+"u",
-        "__W2__": str(seed["sensor_nmos"]["w_large_um"])+"u",
-        "__LPM__": str(seed["mirror_pmos"]["l_um"])+"u",
-        "__WPM__": str(seed["mirror_pmos"]["w_um"])+"u",
+        "__W1__": str(seed["sensor_nmos"]["w_small_um"]),
+        "__W2__": str(seed["sensor_nmos"]["w_large_um"]),
+        "__LPM__": str(seed["mirror_pmos"]["l_um"]),
+        "__WPM__": str(seed["mirror_pmos"]["w_um"]),
         "__OUTPUT_CSV__": output_rel,
     }
     for old, new in replacements.items():
