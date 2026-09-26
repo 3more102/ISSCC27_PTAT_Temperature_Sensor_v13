@@ -169,6 +169,14 @@ def main()->int:
     ap.add_argument("--temps",default="-40:125:5")
     ap.add_argument("--output-dir",type=Path,default=ROOT/"results"/"mismatch_mc")
     ap.add_argument(
+        "--allow-target-fail",
+        action="store_true",
+        help=(
+            "Return success after a complete Monte Carlo run even when internal "
+            "yield targets are missed. Simulation/runtime errors still fail."
+        ),
+    )
+    ap.add_argument(
         "--anchors",
         default=",".join(f"{x:g}" for x in DEFAULT_ANCHORS),
         help="comma-separated calibration anchors in degC; must exist in --temps",
@@ -231,7 +239,12 @@ def main()->int:
     print("MISMATCH MC:",result["status"])
     print("samples:",result["samples"],"error yield:",result["yield_percent_error_le_target"],
           "branch-mismatch yield:",result["yield_percent_branch_mismatch_le_target"])
-    return 0 if result["status"]=="PASS" else 1
+    if result["status"] == "PASS":
+        return 0
+    if args.allow_target_fail:
+        print("MISMATCH MC: target miss retained as evidence; workflow may continue")
+        return 0
+    return 1
 
 if __name__=="__main__":
     raise SystemExit(main())
