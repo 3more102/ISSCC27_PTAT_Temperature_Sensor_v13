@@ -17,10 +17,23 @@ def read_xy(path: Path) -> tuple[list[float], list[float], list[dict[str,str]]]:
         rows = list(csv.DictReader(f, skipinitialspace=True))
     if not rows:
         raise ValueError(f"{path}: no rows")
-    t = [float(r["temp_c"]) for r in rows]
-    v = [float(r["dvgs_v"]) for r in rows]
-    if t != sorted(set(t)) or not all(math.isfinite(x) for x in t+v):
-        raise ValueError(f"{path}: invalid data")
+    try:
+        numeric_rows = [
+            {key: float(value) for key, value in row.items()}
+            for row in rows
+        ]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path}: non-numeric data") from exc
+    if not all(
+        math.isfinite(value)
+        for row in numeric_rows
+        for value in row.values()
+    ):
+        raise ValueError(f"{path}: non-finite data")
+    t = [row["temp_c"] for row in numeric_rows]
+    v = [row["dvgs_v"] for row in numeric_rows]
+    if t != sorted(set(t)):
+        raise ValueError(f"{path}: invalid temperature grid")
     return t, v, rows
 
 def rms(xs: list[float]) -> float:
