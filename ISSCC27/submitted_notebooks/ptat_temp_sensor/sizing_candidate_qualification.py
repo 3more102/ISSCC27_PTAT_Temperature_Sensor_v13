@@ -79,6 +79,27 @@ def require_matching_provenance(sweep: dict, metadata: dict) -> dict:
     return {key: sweep_provenance[key] for key in PROVENANCE_KEYS}
 
 
+def number(label: str, value: object, *, minimum: float = 0.0,
+           maximum: float = math.inf) -> float:
+    """Reject malformed metrics before comparing them with release targets."""
+    if isinstance(value, bool):
+        raise QualificationError(f"{label}: expected a finite number")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise QualificationError(f"{label}: expected a finite number") from exc
+    if not math.isfinite(result) or not minimum <= result <= maximum:
+        raise QualificationError(f"{label}: invalid numeric value {value!r}")
+    return result
+
+
+def positive_integer(label: str, value: object) -> int:
+    result = number(label, value, minimum=1.0)
+    if not result.is_integer():
+        raise QualificationError(f"{label}: expected a positive integer")
+    return int(result)
+
+
 def analyze(
     sweep: dict,
     dense: dict | None,
@@ -100,7 +121,7 @@ def analyze(
             "reason": "sizing screen found no headroom-qualified candidate",
         }
 
-    if not selected.get("headroom_pass"):
+    if selected.get("headroom_pass") is not True:
         raise QualificationError("selected candidate did not pass headroom gate")
     if validation is None:
         raise QualificationError("selected candidate lacks independent validation")
@@ -135,9 +156,62 @@ def analyze(
     )
     provenance = require_matching_provenance(sweep, metadata)
 
-    mismatch_pass = validation.get("status") == "PASS"
-    validation_headroom_pass = validation.get("headroom_pass") is True
-    dense_pass = dense.get("status") == "PASS"
+    # PASS labels are insufficient: reapply the current release contract to
+    # the retained numbers and the actual discovery/validation seed ranges.
+    release = load_json(ROOT / "release_requirements.json")
+    design = load_json(ROOT / "design_requirements.json")
+    targets = release["release_targets"]
+    samples = positive_integer("validation samples", validation["samples"])
+    validation_start = positive_integer(
+        "validation seed start", validation["seed_start"]
+    )
+    screen_samples = positive_integer(
+        "screening samples", sweep["samples_per_candidate"]
+    )
+    screen_start = positive_integer("screening seed start", sweep["seed_start"])
+    independent_seeds = (
+        screen_start + screen_samples <= validation_start
+        or validation_start + samples <= screen_start
+    )
+    error_yield = number(
+        "error yield", validation["error_yield_percent"], maximum=100.0
+    )
+    branch_yield = number(
+        "branch yield", validation["branch_yield_percent"], maximum=100.0
+    )
+    headroom = number(
+        "validation headroom", validation["min_sensor_headroom_v"],
+        minimum=-math.inf,
+    )
+    worst_error = number(
+        "dense PWL error",
+        dense["worst_pwl_max_abs_error_c"]
+        if "worst_pwl_max_abs_error_c" in dense
+        else dense["worst_five_point_pwl_max_abs_error_c"],
+    )
+    worst_branch = number(
+        "dense branch mismatch", dense["worst_mirror_branch_mismatch_percent"]
+    )
+    grid_step = number("dense grid step", dense["max_temperature_step_c"])
+    mismatch_pass = (
+        validation.get("status") == "PASS"
+        and samples >= targets["mismatch_min_samples"]
+        and independent_seeds
+        and error_yield >= targets["mismatch_target_yield_percent"]
+        and branch_yield >= targets["mismatch_target_yield_percent"]
+    )
+    validation_headroom_pass = (
+        validation.get("headroom_pass") is True
+        and headroom >= design["headroom_guardband_v_min"]
+    )
+    dense_pass = (
+        dense.get("status") == "PASS"
+        and worst_error <= targets["dense_grid_pwl_max_abs_error_c_max"]
+        and worst_branch <= design["mirror_branch_mismatch_percent_max"]
+        and 0.0 < grid_step <= targets["dense_grid_step_c_max"]
+        and dense.get("anchors_c")
+        == release["release_architecture"]["calibration_anchors_c"]
+    )
     qualified = bool(
         mismatch_pass and validation_headroom_pass and dense_pass
     )
@@ -162,14 +236,16 @@ def analyze(
         },
         "independent_mismatch": {
             "status": validation.get("status"),
-            "samples": int(validation["samples"]),
-            "seed_start": int(validation["seed_start"]),
-            "error_yield_percent": float(validation["error_yield_percent"]),
-            "branch_yield_percent": float(validation["branch_yield_percent"]),
-            "headroom_pass": bool(validation["headroom_pass"]),
+            "samples": samples,
+            "seed_start": validation_start,
+            "error_yield_percent": error_yield,
+            "branch_yield_percent": branch_yield,
+            "headroom_pass": validation_headroom_pass,
+            "min_sensor_headroom_v": headroom,
         },
         "qualification_components": {
             "independent_mismatch_pass": mismatch_pass,
+            "disjoint_validation_seeds": independent_seeds,
             "independent_headroom_pass": validation_headroom_pass,
             "dense_tt_ff_ss_pass": dense_pass,
             "provenance_match": True,
@@ -178,15 +254,9 @@ def analyze(
         "dense_tt_ff_ss": {
             "status": dense.get("status"),
             "anchors_c": dense.get("anchors_c"),
-            "worst_pwl_max_abs_error_c": float(
-                dense.get(
-                    "worst_pwl_max_abs_error_c",
-                    dense["worst_five_point_pwl_max_abs_error_c"],
-                )
-            ),
-            "worst_mirror_branch_mismatch_percent": float(
-                dense["worst_mirror_branch_mismatch_percent"]
-            ),
+            "worst_pwl_max_abs_error_c": worst_error,
+            "worst_mirror_branch_mismatch_percent": worst_branch,
+            "max_temperature_step_c": grid_step,
         },
         "evidence_boundary": (
             "Qualification is simulation-only. PASS makes the candidate eligible "

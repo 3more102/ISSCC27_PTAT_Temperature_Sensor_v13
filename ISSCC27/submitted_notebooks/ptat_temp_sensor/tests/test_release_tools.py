@@ -177,11 +177,14 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
         "error_yield_percent": 97.0,
         "branch_yield_percent": 96.0,
         "headroom_pass": True,
+        "min_sensor_headroom_v": 0.5,
     }
     sweep = {
         "recommended_for_independent_validation": selected,
         "independent_validation": validation,
         "provenance": MATCHING_PROVENANCE.copy(),
+        "samples_per_candidate": 12,
+        "seed_start": 3001,
     }
     metadata = {
         **MATCHING_PROVENANCE,
@@ -199,6 +202,7 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
         "worst_pwl_max_abs_error_c": 0.45,
         "worst_five_point_pwl_max_abs_error_c": 0.45,
         "worst_mirror_branch_mismatch_percent": 0.8,
+        "max_temperature_step_c": 5.0,
     }
 
     result = sizing_candidate_qualification.analyze(
