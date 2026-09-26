@@ -133,11 +133,21 @@ def render(
     *,
     sensor_linear_scale: float = 1.0,
     mirror_linear_scale: float = 1.0,
+    vdd_v: float | None = None,
+    reference_current_a: float | None = None,
 ) -> str:
     if sensor_linear_scale <= 0.0 or mirror_linear_scale <= 0.0:
         raise ValueError("geometry linear scales must be positive")
 
     design = run_sky130.load_design()["nominal_characterization_seed"]
+    vdd = float(design["vdd_v"] if vdd_v is None else vdd_v)
+    iref = float(
+        design["reference_current_a"]
+        if reference_current_a is None
+        else reference_current_a
+    )
+    if vdd <= 0.0 or iref <= 0.0:
+        raise ValueError("VDD and reference current must be positive")
     sensor = design["sensor_nmos"]
     mirror = design["mirror_pmos"]
     text = (
@@ -149,8 +159,8 @@ def render(
     rep = {
         "__SEED__": str(seed),
         "__MODEL_LIB__": model_lib.as_posix(),
-        "__VDDVAL__": str(design["vdd_v"]),
-        "__IREF__": str(design["reference_current_a"]),
+        "__VDDVAL__": str(vdd),
+        "__IREF__": str(iref),
         "__LNS__": str(sensor["l_um"] * sensor_linear_scale),
         "__WNS1__": str(sensor["w_small_um"] * sensor_linear_scale),
         "__WNS2__": str(sensor["w_large_um"] * sensor_linear_scale),
@@ -179,6 +189,8 @@ def run_sample(
     *,
     sensor_linear_scale: float = 1.0,
     mirror_linear_scale: float = 1.0,
+    vdd_v: float | None = None,
+    reference_current_a: float | None = None,
 ) -> Path:
     out = out.resolve()
     results_root = (ROOT / "results").resolve()
@@ -205,6 +217,8 @@ def run_sample(
             model_lib,
             sensor_linear_scale=sensor_linear_scale,
             mirror_linear_scale=mirror_linear_scale,
+            vdd_v=vdd_v,
+            reference_current_a=reference_current_a,
         ),
         encoding="utf-8",
     )
@@ -345,6 +359,16 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--temps", default="-40:125:5")
     parser.add_argument(
+        "--vdd-v",
+        type=float,
+        help="override nominal supply voltage for this Monte Carlo run",
+    )
+    parser.add_argument(
+        "--reference-current-a",
+        type=float,
+        help="override nominal PMOS reference current for this Monte Carlo run",
+    )
+    parser.add_argument(
         "--anchors",
         default=",".join(f"{x:g}" for x in DEFAULT_ANCHORS),
         help="comma-separated calibration temperatures in degC",
@@ -391,8 +415,16 @@ def main() -> int:
     if (
         args.sensor_linear_scale <= 0.0
         or args.mirror_linear_scale <= 0.0
+        or (args.vdd_v is not None and args.vdd_v <= 0.0)
+        or (
+            args.reference_current_a is not None
+            and args.reference_current_a <= 0.0
+        )
     ):
-        print("MISMATCH MC: FAIL: geometry scales must be positive")
+        print(
+            "MISMATCH MC: FAIL: geometry scales and operating point "
+            "overrides must be positive"
+        )
         return 2
 
     try:
@@ -440,6 +472,8 @@ def main() -> int:
                     ngspice,
                     sensor_linear_scale=args.sensor_linear_scale,
                     mirror_linear_scale=args.mirror_linear_scale,
+                    vdd_v=args.vdd_v,
+                    reference_current_a=args.reference_current_a,
                 )
                 for seed in seeds
             ]
@@ -455,6 +489,8 @@ def main() -> int:
                         ngspice,
                         sensor_linear_scale=args.sensor_linear_scale,
                         mirror_linear_scale=args.mirror_linear_scale,
+                        vdd_v=args.vdd_v,
+                        reference_current_a=args.reference_current_a,
                     )
                     for seed in seeds
                 ]
@@ -476,8 +512,19 @@ def main() -> int:
                 "are preserved"
             ),
         }
+        nominal = run_sky130.load_design()["nominal_characterization_seed"]
         result["seed_start"] = args.seed_start
         result["seed_end"] = args.seed_start + args.samples - 1
+        result["operating_point"] = {
+            "vdd_v": (
+                nominal["vdd_v"] if args.vdd_v is None else args.vdd_v
+            ),
+            "reference_current_a": (
+                nominal["reference_current_a"]
+                if args.reference_current_a is None
+                else args.reference_current_a
+            ),
+        }
         result["provenance"] = {
             "ngspice": run_sky130.ngspice_version(ngspice),
             "ngspice_compatibility_mode": "hsa",
