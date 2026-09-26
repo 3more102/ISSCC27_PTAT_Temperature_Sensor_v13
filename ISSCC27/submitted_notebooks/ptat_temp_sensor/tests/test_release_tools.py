@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import full_pdk_evidence_audit
 import pdk_calibration_analysis
 import readout_budget
 import run_sky130
@@ -125,3 +126,11 @@ def test_mismatch_sizing_default_seed_sets_are_disjoint():
     screen = set(range(screen_start, screen_start + screen_samples))
     validation = set(range(validation_start, validation_start + validation_samples))
     assert screen.isdisjoint(validation)
+
+
+def test_retained_full_pdk_evidence_is_internally_consistent():
+    result = full_pdk_evidence_audit.audit()
+    assert result["status"] == "PASS"
+    assert result["dense_status"] == "PASS"
+    assert result["mismatch_status"] == "FAIL"
+    assert result["candidate_status"].endswith("NOT_RELEASE_VALIDATED")
