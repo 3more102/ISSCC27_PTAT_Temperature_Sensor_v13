@@ -234,3 +234,11 @@ def test_dense_characterization_rejects_incomplete_anchor_coverage():
             volts,
             [-20.0, 0.0, 20.0],
         )
+
+
+def test_calibration_candidate_status_guard_accepts_only_unpromoted_states():
+    guard = calibration_candidate_validation.candidate_status_is_unpromoted
+    assert guard("DISCOVERY_ONLY_NOT_RELEASE_VALIDATED")
+    assert guard("RETROSPECTIVE_SPLIT_ROBUSTNESS_PASS_NOT_RELEASE_VALIDATED")
+    assert not guard("RELEASE_VALIDATED")
+    assert not guard(None)
