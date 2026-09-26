@@ -15,7 +15,9 @@ import run_sky130
 
 ROOT=Path(__file__).resolve().parent
 RELEASE=json.loads((ROOT/"release_requirements.json").read_text(encoding="utf-8"))
+DESIGN=json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
 ANCHORS=[float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
+BRANCH_MISMATCH_TARGET=float(DESIGN["mirror_branch_mismatch_percent_max"])
 PLACEHOLDER_RE=re.compile(r"__[A-Z][A-Z0-9_]*__")
 
 def percentile(xs:list[float],q:float)->float:
@@ -25,6 +27,13 @@ def percentile(xs:list[float],q:float)->float:
     lo=int(math.floor(pos)); hi=int(math.ceil(pos))
     if lo==hi: return ys[lo]
     return ys[lo]*(hi-pos)+ys[hi]*(pos-lo)
+
+def branch_mismatch_percent(branch_small_a:float,branch_large_a:float)->float:
+    small=abs(branch_small_a); large=abs(branch_large_a)
+    denom=(small+large)/2.0
+    if denom<=0.0:
+        raise ValueError("branch currents must have a positive mean magnitude")
+    return abs(small-large)/denom*100.0
 
 def read_rows(path:Path)->list[dict[str,float]]:
     with path.open(newline="",encoding="utf-8") as f:
@@ -110,31 +119,37 @@ def analyze(files:list[Path],temps:list[float])->dict:
         err=pwl_errors(rows)
         maxerr=max(abs(x) for x in err)
         rms=math.sqrt(sum(x*x for x in err)/len(err))
-        mm=max(abs(r["branch_small_a"]-r["branch_large_a"])/
-               ((r["branch_small_a"]+r["branch_large_a"])/2)*100 for r in rows)
+        mm=max(branch_mismatch_percent(r["branch_small_a"],r["branch_large_a"])
+               for r in rows)
         power=max(r["power_w"] for r in rows)*1e6
         near=min(rows,key=lambda r:abs(r["temp_c"]-25))
         dv25.append(near["dvgs_v"])
         samples.append({"file":f.name,"max_abs_error_c":maxerr,"rms_error_c":rms,
                         "max_branch_mismatch_percent":mm,"max_power_uw":power,
-                        "pass_error_target":maxerr<=target})
+                        "pass_error_target":maxerr<=target,
+                        "pass_branch_mismatch_target":mm<=BRANCH_MISMATCH_TARGET})
     if len(samples)>1 and pstdev(dv25)<1e-12:
         raise RuntimeError("no measurable variation across seeds; mismatch model may be inactive")
     errors=[x["max_abs_error_c"] for x in samples]
     yield_pct=100*sum(x["pass_error_target"] for x in samples)/len(samples)
+    branch_yield_pct=100*sum(x["pass_branch_mismatch_target"] for x in samples)/len(samples)
     min_samples=int(RELEASE["release_targets"]["mismatch_min_samples"])
     yield_target=float(RELEASE["release_targets"]["mismatch_target_yield_percent"])
     complete=len(samples)>=min_samples
     return {
-        "status":"PASS" if complete and yield_pct>=yield_target else "FAIL",
+        "status":"PASS" if (
+            complete and yield_pct>=yield_target and branch_yield_pct>=yield_target
+        ) else "FAIL",
         "evidence_class":"SKY130/open_pdks local device mismatch via tt_mm; simulation only",
         "samples":len(samples),
         "minimum_samples_target":min_samples,
         "calibration":"per-sample fixed five-point PWL at release anchors",
         "temperature_c":temps,
         "yield_percent_error_le_target":yield_pct,
+        "yield_percent_branch_mismatch_le_target":branch_yield_pct,
         "yield_target_percent":yield_target,
         "error_target_c":target,
+        "branch_mismatch_target_percent":BRANCH_MISMATCH_TARGET,
         "max_abs_error_c":{"mean":mean(errors),"std":pstdev(errors) if len(errors)>1 else 0.0,
                            "p50":percentile(errors,.50),"p95":percentile(errors,.95),
                            "p99":percentile(errors,.99),"worst":max(errors)},
@@ -168,7 +183,8 @@ def main()->int:
         json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8"
     )
     print("MISMATCH MC:",result["status"])
-    print("samples:",result["samples"],"yield:",result["yield_percent_error_le_target"])
+    print("samples:",result["samples"],"error yield:",result["yield_percent_error_le_target"],
+          "branch-mismatch yield:",result["yield_percent_branch_mismatch_le_target"])
     return 0 if result["status"]=="PASS" else 1
 
 if __name__=="__main__":
