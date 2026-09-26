@@ -6,7 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 RELEASE = json.loads((ROOT/"release_requirements.json").read_text(encoding="utf-8"))
+DESIGN = json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
 ANCHORS = [float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
+MIRROR_MISMATCH_TARGET = float(DESIGN["mirror_branch_mismatch_percent_max"])
 
 def read_xy(path: Path) -> tuple[list[float], list[float], list[dict[str,str]]]:
     with path.open(newline="", encoding="utf-8") as f:
@@ -43,6 +45,14 @@ def fixed_pwl_errors(t: list[float], v: list[float]) -> list[float]:
 def summarize_errors(err: list[float]) -> dict:
     return {"max_abs_error_c":max(abs(x) for x in err), "rms_error_c":rms(err)}
 
+def branch_mismatch_percent(branch_small_a: float, branch_large_a: float) -> float:
+    small = abs(branch_small_a)
+    large = abs(branch_large_a)
+    denom = (small + large) / 2.0
+    if denom <= 0.0:
+        raise ValueError("branch currents must have a positive mean magnitude")
+    return abs(small - large) / denom * 100.0
+
 def analyze(input_dir: Path) -> dict:
     per={}
     for mode in ("ideal","mirror"):
@@ -60,24 +70,36 @@ def analyze(input_dir: Path) -> dict:
                 "max_power_uw":max(float(r["power_w"]) for r in rows)*1e6,
             }
             if mode=="mirror":
-                item["max_branch_mismatch_percent"]=max(
-                    abs(float(r["branch_small_a"])-float(r["branch_large_a"]))/
-                    ((float(r["branch_small_a"])+float(r["branch_large_a"]))/2)*100
+                mismatch=max(
+                    branch_mismatch_percent(
+                        float(r["branch_small_a"]), float(r["branch_large_a"])
+                    )
                     for r in rows
                 )
+                item["max_branch_mismatch_percent"]=mismatch
+                item["pass_branch_mismatch_target"]=mismatch<=MIRROR_MISMATCH_TARGET
             per[f"{mode}_{corner}"]=item
     target=float(RELEASE["release_targets"]["dense_grid_pwl_max_abs_error_c_max"])
     max_step_target=float(RELEASE["release_targets"]["dense_grid_step_c_max"])
     worst=max(x["five_point_pwl"]["max_abs_error_c"] for x in per.values())
     step=max(x["max_step_c"] for x in per.values())
+    worst_mirror_mismatch=max(
+        x["max_branch_mismatch_percent"]
+        for key,x in per.items() if key.startswith("mirror_")
+    )
     return {
-        "status":"PASS" if worst<=target and step<=max_step_target else "FAIL",
+        "status":"PASS" if (
+            worst<=target and step<=max_step_target
+            and worst_mirror_mismatch<=MIRROR_MISMATCH_TARGET
+        ) else "FAIL",
         "evidence_boundary":"New transistor-level SKY130 dense-grid evidence; not silicon and not layout-extracted.",
         "calibration":"fixed five-point PWL using release anchors; no interpolation is used for error scoring",
         "anchors_c":ANCHORS,
         "worst_five_point_pwl_max_abs_error_c":worst,
         "max_temperature_step_c":step,
         "target_max_abs_error_c":target,
+        "worst_mirror_branch_mismatch_percent":worst_mirror_mismatch,
+        "mirror_branch_mismatch_target_percent":MIRROR_MISMATCH_TARGET,
         "per_dataset":per,
     }
 
@@ -102,6 +124,7 @@ def main()->int:
         args.output.write_text(rendered,encoding="utf-8")
     print(f"DENSE CHARACTERIZATION: {result['status']}")
     print("worst five-point PWL error:",result["worst_five_point_pwl_max_abs_error_c"])
+    print("worst mirror branch mismatch (%):",result["worst_mirror_branch_mismatch_percent"])
     return 0 if result["status"]=="PASS" else 1
 
 if __name__=="__main__":
