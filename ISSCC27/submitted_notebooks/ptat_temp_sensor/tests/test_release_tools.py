@@ -312,3 +312,39 @@ def test_sizing_candidate_qualification_rejects_provenance_mismatch():
         sizing_candidate_qualification.require_matching_provenance(
             sweep, dense_metadata
         )
+
+
+
+def test_candidate_readout_budget_accepts_dense_linear_data(tmp_path):
+    temps = [float(value) for value in range(-40, 126, 5)]
+    for mode in ("ideal", "mirror"):
+        for corner in ("tt", "ff", "ss"):
+            path = tmp_path / f"ptat_{mode}_{corner}.csv"
+            lines = ["temp_c,dvgs_v"]
+            for temp in temps:
+                dvgs = 0.050 + (temp + 40.0) * 0.0002
+                lines.append(f"{temp:.1f},{dvgs:.12g}")
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    metadata = {
+        **MATCHING_PROVENANCE,
+        "sensor_linear_scale": 2.0,
+        "mirror_linear_scale": 8.0,
+        "operating_point": {
+            "reference_current_a": 1.0e-6,
+            "branch_current_a": 1.0e-6,
+            "vdd_v": 1.8,
+        },
+    }
+    (tmp_path / "run_metadata.json").write_text(
+        json.dumps(metadata),
+        encoding="utf-8",
+    )
+
+    result = readout_budget.analyze_directory(tmp_path)
+    assert result["status"] == "PASS"
+    assert result["anchors_c"] == [-40, -20, 0, 50, 125]
+    assert result["worst_quantization_rms_c"] < 0.1
+    assert result["worst_full_scale_utilization"] < 0.9
+    assert result["worst_quantized_pwl_sampled_error_c"] < 0.5
+    assert result["provenance"] == MATCHING_PROVENANCE
