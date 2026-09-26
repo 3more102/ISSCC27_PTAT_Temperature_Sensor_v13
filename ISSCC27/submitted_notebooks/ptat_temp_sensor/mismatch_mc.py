@@ -55,11 +55,11 @@ def render(seed:int,temps:list[float],output_rel:str,model_lib:Path)->str:
     rep={
         "__SEED__":str(seed),"__MODEL_LIB__":model_lib.as_posix(),
         "__VDDVAL__":str(d["vdd_v"]),"__IREF__":str(d["reference_current_a"]),
-        "__LNS__":str(d["sensor_nmos"]["l_um"])+"u",
-        "__WNS1__":str(d["sensor_nmos"]["w_small_um"])+"u",
-        "__WNS2__":str(d["sensor_nmos"]["w_large_um"])+"u",
-        "__LPM__":str(d["mirror_pmos"]["l_um"])+"u",
-        "__WPM__":str(d["mirror_pmos"]["w_um"])+"u",
+        "__LNS__":str(d["sensor_nmos"]["l_um"]),
+        "__WNS1__":str(d["sensor_nmos"]["w_small_um"]),
+        "__WNS2__":str(d["sensor_nmos"]["w_large_um"]),
+        "__LPM__":str(d["mirror_pmos"]["l_um"]),
+        "__WPM__":str(d["mirror_pmos"]["w_um"]),
         "__TEMPS__":" ".join(f"{x:g}" for x in temps),
         "__OUTPUT_CSV__":output_rel,
     }
