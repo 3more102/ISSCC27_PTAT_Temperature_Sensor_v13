@@ -8,7 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import calibration_candidate_validation\nimport dense_characterization\nimport mismatch_mc\nimport run_sky130\n
+import calibration_candidate_validation
+import dense_characterization
+import mismatch_mc
+import run_sky130
+
 
 DENSE_TEMPS = [float(t) for t in range(-40, 126, 5)]
 ANCHOR_TEMPS = [-40.0, -20.0, 0.0, 50.0, 125.0]
