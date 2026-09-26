@@ -78,6 +78,7 @@ def main():
         "design_requirements.json",
         "release_requirements.json",
         "evidence_audit.py",
+        "full_pdk_evidence_audit.py",
         "pdk_calibration_analysis.py",
         "readout_budget.py",
     ]
@@ -93,6 +94,11 @@ def main():
     ok &= notebook_ok
 
     ok &= run("retained evidence audit", sys.executable, "evidence_audit.py")
+    ok &= run(
+        "retained full-PDK evidence audit",
+        sys.executable,
+        "full_pdk_evidence_audit.py",
+    )
     ok &= run(
         "retained calibration audit",
         sys.executable,
