@@ -151,6 +151,19 @@ def candidate_metrics(result: dict, files: list[Path]) -> dict:
     }
 
 
+
+def seed_ranges_overlap(
+    first_start: int,
+    first_count: int,
+    second_start: int,
+    second_count: int,
+) -> bool:
+    """Return True when two inclusive integer seed ranges intersect."""
+    first_end = first_start + first_count - 1
+    second_end = second_start + second_count - 1
+    return not (first_end < second_start or second_end < first_start)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--samples-per-candidate", type=int, default=12)
@@ -172,6 +185,21 @@ def main() -> int:
         or args.jobs < 1
     ):
         print("MISMATCH SIZING SWEEP: FAIL: invalid sample/job count")
+        return 2
+
+    if (
+        args.validation_samples >= 2
+        and seed_ranges_overlap(
+            args.seed_start,
+            args.samples_per_candidate,
+            args.validation_seed_start,
+            args.validation_samples,
+        )
+    ):
+        print(
+            "MISMATCH SIZING SWEEP: FAIL: screening and validation "
+            "seed ranges must be disjoint"
+        )
         return 2
 
     temps = run_sky130.parse_temps(args.temps)
