@@ -192,7 +192,7 @@ def ngspice_version(ngspice: str) -> str:
     lines = (proc.stdout + "\n" + proc.stderr).splitlines()
     for line in lines:
         match = re.search(
-            r"\\bngspice(?:\\s+release)?[-\\s]+(\\d+(?:\\.\\d+)*)\\b",
+            r"\bngspice(?:\s+release)?[-\s]+(\d+(?:\.\d+)*)\b",
             line,
             flags=re.IGNORECASE,
         )
