@@ -7,7 +7,8 @@ deterministic local-mismatch realization that remains fixed during its
 temperature sweep.
 """
 from __future__ import annotations
-import argparse, csv, json, math, re, shutil, subprocess, sys\nfrom concurrent.futures import ThreadPoolExecutor, as_completed
+import argparse, csv, json, math, re, shutil, subprocess, sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from statistics import mean, pstdev
 
