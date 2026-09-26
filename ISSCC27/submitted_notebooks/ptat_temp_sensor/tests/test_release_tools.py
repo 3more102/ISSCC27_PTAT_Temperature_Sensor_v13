@@ -23,6 +23,20 @@ MATCHING_PROVENANCE = {
 }
 
 
+def candidate_readout(status="PASS"):
+    return {
+        "status": status,
+        "anchors_c": [-40, -20, 0, 50, 125],
+        "bits": 12,
+        "vref_v": 1.8,
+        "analog_gain": 10.0,
+        "worst_quantization_rms_c": 0.05,
+        "worst_full_scale_utilization": 0.5,
+        "worst_quantized_pwl_sampled_error_c": 0.45,
+        "provenance": MATCHING_PROVENANCE.copy(),
+    }
+
+
 def test_retained_five_point_target_is_met():
     r = pdk_calibration_analysis.analyze()
     assert r["five_point_pwl_grid_calibration"]["worst_max_abs_error_c"] < 0.5
@@ -204,9 +218,10 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
         "worst_mirror_branch_mismatch_percent": 0.8,
         "max_temperature_step_c": 5.0,
     }
+    readout = candidate_readout()
 
     result = sizing_candidate_qualification.analyze(
-        sweep, dense, metadata, 1.0e-7
+        sweep, dense, metadata, readout, 1.0e-7
     )
     assert result["status"] == "QUALIFIED_FOR_RELEASE_REVIEW"
     assert result["qualified_for_release_review"] is True
@@ -214,7 +229,7 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
 
     dense["status"] = "FAIL"
     result = sizing_candidate_qualification.analyze(
-        sweep, dense, metadata, 1.0e-7
+        sweep, dense, metadata, readout, 1.0e-7
     )
     assert result["status"] == "NOT_QUALIFIED_FOR_RELEASE_REVIEW"
     assert result["qualified_for_release_review"] is False
@@ -222,13 +237,21 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
     dense["status"] = "PASS"
     validation["headroom_pass"] = False
     result = sizing_candidate_qualification.analyze(
-        sweep, dense, metadata, 1.0e-7
+        sweep, dense, metadata, readout, 1.0e-7
     )
     assert result["status"] == "NOT_QUALIFIED_FOR_RELEASE_REVIEW"
     assert (
         result["qualification_components"]["independent_headroom_pass"]
         is False
     )
+
+    validation["headroom_pass"] = True
+    readout["status"] = "FAIL"
+    result = sizing_candidate_qualification.analyze(
+        sweep, dense, metadata, readout, 1.0e-7
+    )
+    assert result["qualified_for_release_review"] is False
+    assert result["qualification_components"]["readout_pass"] is False
 
 
 def test_sizing_candidate_qualification_rejects_evidence_mismatch():
@@ -272,7 +295,7 @@ def test_sizing_candidate_qualification_rejects_evidence_mismatch():
         match="mirror linear scale",
     ):
         sizing_candidate_qualification.analyze(
-            sweep, dense, metadata, 1.0e-7
+            sweep, dense, metadata, readout, 1.0e-7
         )
 
 
