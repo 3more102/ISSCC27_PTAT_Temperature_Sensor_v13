@@ -15,6 +15,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
+PROVENANCE_KEYS = (
+    "ngspice",
+    "ngspice_compatibility_mode",
+    "pdk_revision",
+    "model_sha256",
+    "design_requirements_sha256",
+)
+
 
 class QualificationError(RuntimeError):
     pass
@@ -39,6 +47,36 @@ def close(label: str, actual: float, expected: float) -> None:
         raise QualificationError(
             f"{label}: dense={actual!r}, selected={expected!r}"
         )
+
+
+def require_matching_provenance(sweep: dict, metadata: dict) -> dict:
+    sweep_provenance = sweep.get("provenance")
+    if not isinstance(sweep_provenance, dict):
+        raise QualificationError("sizing sweep is missing provenance")
+
+    missing_sweep = [
+        key for key in PROVENANCE_KEYS if not sweep_provenance.get(key)
+    ]
+    missing_dense = [
+        key for key in PROVENANCE_KEYS if not metadata.get(key)
+    ]
+    if missing_sweep:
+        raise QualificationError(
+            f"sizing sweep provenance is incomplete: {missing_sweep}"
+        )
+    if missing_dense:
+        raise QualificationError(
+            f"dense-run provenance is incomplete: {missing_dense}"
+        )
+
+    for key in PROVENANCE_KEYS:
+        if sweep_provenance[key] != metadata[key]:
+            raise QualificationError(
+                f"{key} provenance mismatch: "
+                f"sweep={sweep_provenance[key]!r}, dense={metadata[key]!r}"
+            )
+
+    return {key: sweep_provenance[key] for key in PROVENANCE_KEYS}
 
 
 def analyze(
@@ -95,6 +133,7 @@ def analyze(
         metadata["mirror_linear_scale"],
         selected["mirror_linear_scale"],
     )
+    provenance = require_matching_provenance(sweep, metadata)
 
     mismatch_pass = validation.get("status") == "PASS"
     validation_headroom_pass = validation.get("headroom_pass") is True
@@ -133,7 +172,9 @@ def analyze(
             "independent_mismatch_pass": mismatch_pass,
             "independent_headroom_pass": validation_headroom_pass,
             "dense_tt_ff_ss_pass": dense_pass,
+            "provenance_match": True,
         },
+        "provenance": provenance,
         "dense_tt_ff_ss": {
             "status": dense.get("status"),
             "anchors_c": dense.get("anchors_c"),
