@@ -63,6 +63,16 @@ def test_sky130_render_matches_retained_micron_dimension_convention(tmp_path):
     assert "1.0u" not in ideal
     assert "8.0u" not in ideal
 
+    mirror = run_sky130.render("mirror", "tt", [-40.0, 125.0], "dense_pdk/test.csv", model)
+    assert "LNS=0.5" in mirror
+    assert "WNS1=1.0" in mirror
+    assert "WNS2=8.0" in mirror
+    assert "LPM=1.0" in mirror
+    assert "WPM=4.0" in mirror
+    assert "__WNS1__" not in mirror
+    assert "__WNS2__" not in mirror
+    assert "0.5u" not in mirror
+
     mirror = run_sky130.render("mirror", "tt", [-40.0, 125.0], "dense_pdk/test_mirror.csv", model)
     assert "__WNS1__" not in mirror
     assert "__WNS2__" not in mirror
