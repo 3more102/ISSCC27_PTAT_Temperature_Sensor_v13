@@ -55,6 +55,8 @@ def check_notebook() -> tuple[bool, list[str]]:
         "submission contact": "Submission contact",
         "team member": "Team member",
         "references": "## References",
+        "official Colab badge": "colab-badge.svg",
+        "official upstream badge target": "github/sscs-ose/sscs-ose-code-a-chip.github.io",
         "retained ngspice version": "ngspice 46",
         "pinned SKY130/open_pdks revision": PINNED_PDK,
         "reproducibility section": "## Reproducibility",
