@@ -93,15 +93,20 @@ jobs:
         run: |
           python run_sky130.py --mode both --corners tt ff ss --temps=-40:125:5
           python dense_characterization.py
+      - name: Dense low-power 1.2 V / 10 nA candidate
+        run: |
+          python run_sky130.py --mode both --corners tt ff ss             --temps=-40:125:5 --vdd-v 1.2             --branch-current-a 1e-8 --reference-current-a 1e-8             --output-dir results/dense_lowpower_1p2v_10na
+          python dense_characterization.py             --input-dir results/dense_lowpower_1p2v_10na             --output results/dense_lowpower_1p2v_10na_analysis.json             --anchors=-40,-20,25,75,125 --allow-fail
       - name: Local mismatch Monte Carlo evidence
         run: >-
           python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5
           --allow-fail
-      - name: Independent six-point calibration validation
+      - name: Independent low-power 1.2 V / 10 nA mismatch validation
         run: >-
           python mismatch_mc.py --samples 100 --seed-start 7001 --jobs 4
-          --temps=-40:125:5 --anchors=-40,-25,-5,25,65,125
-          --output-dir results/mismatch_candidate_validation --allow-fail
+          --temps=-40:125:5 --anchors=-40,-20,25,75,125
+          --vdd-v 1.2 --reference-current-a 1e-8
+          --output-dir results/mismatch_lowpower_1p2v_10na --allow-fail
       - name: Mismatch sizing exploration
         run: |
           python mismatch_sizing_sweep.py --samples-per-candidate 12 \
@@ -143,7 +148,9 @@ jobs:
           path: |
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_lowpower_1p2v_10na
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_lowpower_1p2v_10na_analysis.json
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
-            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_candidate_validation
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_lowpower_1p2v_10na
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_candidate_independent
