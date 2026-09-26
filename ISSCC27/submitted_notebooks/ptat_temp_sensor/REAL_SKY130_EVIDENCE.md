@@ -14,17 +14,21 @@ This directory contains real transistor-level ngspice characterization generated
 
 ## Evidence boundary
 
-These are real PDK simulations. They are **not silicon measurements** and the mirror results are **not statistical mismatch Monte Carlo**.
+These are real PDK simulations. They are **not silicon measurements** and the mirror results are **not statistical mismatch Monte Carlo**. Layout DRC/LVS is **not claimed as PASS**.
 
 ## Verified results
 
-| Configuration | Corner | PTAT slope (µV/K) | ΔVGS @25°C (mV) | Max power (µW) | Max nonlinearity (°C) |
-|---|---:|---:|---:|---:|---:|
-| Ideal bias | TT | 277.862 | 100.017 | 0.360 | 2.776 |
-| Ideal bias | FF | 266.617 | 88.961 | 0.360 | 2.548 |
-| Ideal bias | SS | 292.137 | 111.296 | 0.360 | 2.983 |
-| PMOS mirror | TT | 277.734 | 99.955 | 0.548 | 2.762 |
-| PMOS mirror | FF | 266.613 | 88.934 | 0.549 | 2.545 |
-| PMOS mirror | SS | 292.159 | 111.305 | 0.548 | 2.983 |
+| Configuration | Corner | PTAT slope (µV/K) | ΔVGS @25°C (mV) | Max power (µW) | Max nonlinearity (°C) | Max branch mismatch (%) |
+|---|---:|---:|---:|---:|---:|---:|
+| Ideal bias | TT | 277.862 | 100.017 | 0.360 | 2.776 | — |
+| Ideal bias | FF | 266.617 | 88.961 | 0.360 | 2.548 | — |
+| Ideal bias | SS | 292.137 | 111.296 | 0.360 | 2.983 | — |
+| PMOS mirror | TT | 277.734 | 99.955 | 0.548 | 2.762 | 0.337 |
+| PMOS mirror | FF | 266.603 | 88.927 | 0.549 | 2.547 | 0.303 |
+| PMOS mirror | SS | 291.913 | 111.208 | 0.547 | 2.963 | 0.372 |
 
-The complete raw CSVs, ngspice logs, generated SPICE decks, and machine-readable manifest are preserved in `results/sky130_ci/`.
+The values above are derived from the retained CSVs and match `results/sky130_ci_manifest.json`.
+
+Run `python evidence_audit.py` from this project directory to recompute the promoted summary from the CSV evidence and verify the canonical design-requirements hash.
+
+The archived run-221 bundle is retained at repository level under `evidence/sky130_evidence_run221.tar.gz`.
