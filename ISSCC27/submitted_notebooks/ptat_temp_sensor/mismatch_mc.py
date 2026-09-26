@@ -312,17 +312,24 @@ def analyze(
         RELEASE["release_targets"]["mismatch_target_yield_percent"]
     )
     complete = len(samples) >= min_samples
+    error_yield_status = (
+        "PASS" if complete and yield_pct >= yield_target else "FAIL"
+    )
+    branch_mismatch_yield_status = (
+        "PASS" if complete and branch_yield_pct >= yield_target else "FAIL"
+    )
 
     return {
         "status": (
             "PASS"
             if (
-                complete
-                and yield_pct >= yield_target
-                and branch_yield_pct >= yield_target
+                error_yield_status == "PASS"
+                and branch_mismatch_yield_status == "PASS"
             )
             else "FAIL"
         ),
+        "error_yield_status": error_yield_status,
+        "branch_mismatch_yield_status": branch_mismatch_yield_status,
         "evidence_class": (
             "SKY130/open_pdks local device mismatch via tt_mm; simulation only"
         ),
