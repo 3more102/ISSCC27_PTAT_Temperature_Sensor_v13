@@ -70,19 +70,8 @@ def active_device_area_um2(design: dict) -> float:
     return float(sensor_area + mirror_area)
 
 
-def wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -> list[float]:
-    if total <= 0:
-        return [math.nan, math.nan]
-    p = successes / total
-    denom = 1.0 + z * z / total
-    center = (p + z * z / (2.0 * total)) / denom
-    radius = z * math.sqrt(
-        p * (1.0 - p) / total + z * z / (4.0 * total * total)
-    ) / denom
-    return [100.0 * (center - radius), 100.0 * (center + radius)]
-
-
 def enrich_yield_intervals(summary: dict) -> None:
+    """Attach canonical mismatch confidence intervals and pass counts."""
     n = int(summary["samples"])
     error_success = sum(
         bool(x["pass_error_target"]) for x in summary["per_sample"]
@@ -90,8 +79,14 @@ def enrich_yield_intervals(summary: dict) -> None:
     branch_success = sum(
         bool(x["pass_branch_mismatch_target"]) for x in summary["per_sample"]
     )
-    summary["error_yield_wilson_95_percent"] = wilson_interval(error_success, n)
-    summary["branch_yield_wilson_95_percent"] = wilson_interval(branch_success, n)
+    summary["error_pass_count"] = error_success
+    summary["branch_pass_count"] = branch_success
+    summary["error_yield_wilson_95_percent"] = (
+        mismatch_mc.wilson_interval_percent(error_success, n)
+    )
+    summary["branch_yield_wilson_95_percent"] = (
+        mismatch_mc.wilson_interval_percent(branch_success, n)
+    )
 
 
 def candidate_score(summary: dict, area_um2: float) -> tuple[float, float, float, float]:
@@ -302,6 +297,14 @@ def main() -> int:
             model_lib=model_lib,
             ngspice=ngspice,
         )
+        yield_target = float(validation["yield_target_percent"])
+        validation_confidence_pass = (
+            validation["status"] == "PASS"
+            and validation["error_yield_wilson_95_percent"][0]
+            >= yield_target
+            and validation["branch_yield_wilson_95_percent"][0]
+            >= yield_target
+        )
 
         result = {
             "method": {
@@ -352,7 +355,23 @@ def main() -> int:
                 for item in screen_results
             ],
             "validation": validation,
-            "qualification_status": validation["status"],
+            "qualification_status": (
+                "CONFIDENCE_BACKED_PASS"
+                if validation_confidence_pass
+                else "NOT_CONFIDENCE_BACKED"
+            ),
+            "validation_point_estimate_status": validation["status"],
+            "confidence_contract": {
+                "interval": "two-sided 95% Wilson",
+                "yield_target_percent": yield_target,
+                "error_yield_lower_bound_percent": validation[
+                    "error_yield_wilson_95_percent"
+                ][0],
+                "branch_yield_lower_bound_percent": validation[
+                    "branch_yield_wilson_95_percent"
+                ][0],
+                "pass": validation_confidence_pass,
+            },
             "release_architecture_changed": False,
         }
         args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -368,6 +387,8 @@ def main() -> int:
     print(
         "VALIDATION:",
         result["qualification_status"],
+        "point_status=",
+        result["validation_point_estimate_status"],
         "error_yield=",
         validation["yield_percent_error_le_target"],
         "branch_yield=",
