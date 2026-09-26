@@ -92,6 +92,11 @@ def test_mismatch_mc_requires_branch_mismatch_yield(monkeypatch, tmp_path):
     assert result["status"] == "FAIL"
 
 
+def test_wilson_confidence_distinguishes_point_yield_from_evidence():
+    assert mismatch_mc.wilson_interval_percent(98, 100)[0] < 95.0
+    assert mismatch_mc.wilson_interval_percent(100, 100)[0] > 95.0
+
+
 def test_pdk_revision_prefers_explicit_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("SKY130_PDK_REVISION", "pinned-revision")
     model = tmp_path / "sky130.lib.spice"
