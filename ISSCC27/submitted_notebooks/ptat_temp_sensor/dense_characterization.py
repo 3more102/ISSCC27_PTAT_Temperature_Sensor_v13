@@ -34,6 +34,18 @@ def read_xy(path: Path) -> tuple[list[float], list[float], list[dict[str,str]]]:
     v = [row["dvgs_v"] for row in numeric_rows]
     if t != sorted(set(t)):
         raise ValueError(f"{path}: invalid temperature grid")
+    for row in numeric_rows:
+        if not {
+            "vgs_small_v",
+            "vgs_large_v",
+            "dvgs_v",
+        }.issubset(row):
+            raise ValueError(f"{path}: missing VGS columns")
+        derived_dvgs = row["vgs_small_v"] - row["vgs_large_v"]
+        if abs(row["dvgs_v"] - derived_dvgs) > 2.0e-6:
+            raise ValueError(
+                f"{path}: dvgs_v is inconsistent with the recorded VGS values"
+            )
     return t, v, rows
 
 def rms(xs: list[float]) -> float:
