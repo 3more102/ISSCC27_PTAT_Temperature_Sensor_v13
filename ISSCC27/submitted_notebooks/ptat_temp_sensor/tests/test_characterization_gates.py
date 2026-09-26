@@ -173,3 +173,47 @@ def test_candidate_validation_keeps_branch_mismatch_separate(tmp_path):
     assert result["candidate"]["yield_percent_le_target"] == pytest.approx(100.0)
     assert result["branch_mismatch"]["status"] == "FAIL"
     assert result["branch_mismatch"]["yield_percent_le_target"] == pytest.approx(50.0)
+
+def test_characterization_seed_supports_low_power_operating_point():
+    seed = run_sky130.characterization_seed(
+        1.0,
+        vdd_v=1.2,
+        branch_current_a=1.0e-8,
+        reference_current_a=1.0e-8,
+    )
+    assert seed["vdd_v"] == pytest.approx(1.2)
+    assert seed["branch_current_a"] == pytest.approx(1.0e-8)
+    assert seed["reference_current_a"] == pytest.approx(1.0e-8)
+    assert seed["sensor_nmos"]["w_small_um"] == pytest.approx(1.0)
+    assert seed["sensor_nmos"]["w_large_um"] == pytest.approx(8.0)
+
+
+def test_mismatch_render_applies_low_power_overrides(tmp_path):
+    rendered = mismatch_mc.render(
+        7001,
+        ANCHOR_TEMPS,
+        "test_candidate.csv",
+        tmp_path / "sky130.lib.spice",
+        vdd_v=1.2,
+        reference_current_a=1.0e-8,
+    )
+    assert "VDDVAL=1.2" in rendered
+    assert "IREF=1e-08" in rendered
+    assert "__VDDVAL__" not in rendered
+    assert "__IREF__" not in rendered
+
+
+def test_dense_characterization_accepts_explicit_anchor_schedule(tmp_path):
+    custom_anchors = [-40.0, -20.0, 25.0, 75.0, 125.0]
+    for mode in ("ideal", "mirror"):
+        for corner in ("tt", "ff", "ss"):
+            _write_rows(
+                tmp_path / f"ptat_{mode}_{corner}.csv",
+                DENSE_TEMPS,
+                branch_ratio=1.0,
+            )
+    result = dense_characterization.analyze(tmp_path, custom_anchors)
+    assert result["anchors_c"] == custom_anchors
+    assert result["worst_five_point_pwl_max_abs_error_c"] < 1e-9
+    assert result["status"] == "PASS"
+
