@@ -5,12 +5,13 @@ This runner creates NEW simulation evidence. It never overwrites retained run-22
 evidence unless the caller explicitly chooses the same output path.
 """
 from __future__ import annotations
-import argparse, csv, hashlib, json, os, re, shutil, subprocess, sys
+import argparse, copy, csv, hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SPICE = ROOT / "spice"
 PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
+
 
 def parse_temps(spec: str) -> list[float]:
     if ":" not in spec:
@@ -28,6 +29,7 @@ def parse_temps(spec: str) -> list[float]:
     if vals != sorted(set(vals)):
         raise ValueError("temperature grid must be strictly increasing")
     return vals
+
 
 def discover_model_lib() -> Path:
     direct = os.environ.get("SKY130_MODEL_LIB")
@@ -48,7 +50,12 @@ def discover_model_lib() -> Path:
             root/"libs.tech"/"ngspice"/"sky130.lib.spice",
         ]
         if root.exists():
-            candidates += list(root.glob("sky130/versions/*/sky130A/libs.tech/ngspice/sky130.lib.spice"))
+            candidates += list(
+                root.glob(
+                    "sky130/versions/*/sky130A/libs.tech/ngspice/"
+                    "sky130.lib.spice"
+                )
+            )
     for p in candidates:
         if p.is_file():
             return p.resolve()
@@ -56,13 +63,9 @@ def discover_model_lib() -> Path:
         "Cannot locate sky130.lib.spice. Set SKY130_MODEL_LIB or PDK_ROOT."
     )
 
-def prepare_ngspice_environment(output_dir: Path) -> tuple[dict[str, str], Path]:
-    """Create an isolated ngspice HOME with the SKY130 compatibility mode enabled.
 
-    SKY130's sectioned .lib model deck requires ngspice compatibility parsing.
-    Keeping the initialization local to generated evidence avoids depending on a
-    user's global ~/.spiceinit and makes CI/local behavior reproducible.
-    """
+def prepare_ngspice_environment(output_dir: Path) -> tuple[dict[str, str], Path]:
+    """Create an isolated ngspice HOME with SKY130 compatibility enabled."""
     runtime_home = (output_dir / "ngspice_home").resolve()
     runtime_home.mkdir(parents=True, exist_ok=True)
     spiceinit = runtime_home / ".spiceinit"
@@ -71,8 +74,57 @@ def prepare_ngspice_environment(output_dir: Path) -> tuple[dict[str, str], Path]
     env["HOME"] = str(runtime_home)
     return env, spiceinit
 
+
 def load_design() -> dict:
-    return json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
+    return json.loads(
+        (ROOT/"design_requirements.json").read_text(encoding="utf-8")
+    )
+
+
+def characterization_seed(linear_scale: float = 1.0) -> dict:
+    """Return the nominal seed with W and L scaled together.
+
+    Scaling W and L by the same factor preserves nominal W/L and the 8:1
+    sensor width ratio while increasing device area as scale**2. This is used
+    only for explicit sizing studies unless design_requirements.json itself is
+    changed after verification.
+    """
+    if not math_isfinite_positive(linear_scale):
+        raise ValueError("device linear scale must be a finite positive number")
+    seed = copy.deepcopy(load_design()["nominal_characterization_seed"])
+    sensor = seed["sensor_nmos"]
+    mirror = seed["mirror_pmos"]
+    sensor["l_um"] *= linear_scale
+    sensor["w_small_um"] *= linear_scale
+    sensor["w_large_um"] *= linear_scale
+    mirror["l_um"] *= linear_scale
+    mirror["w_um"] *= linear_scale
+    return seed
+
+
+def math_isfinite_positive(value: float) -> bool:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return number > 0.0 and number < float("inf")
+
+
+def seed_geometry(seed: dict) -> dict:
+    sensor = seed["sensor_nmos"]
+    mirror = seed["mirror_pmos"]
+    return {
+        "sensor_nmos": {
+            "l_um": sensor["l_um"],
+            "w_small_um": sensor["w_small_um"],
+            "w_large_um": sensor["w_large_um"],
+        },
+        "mirror_pmos": {
+            "l_um": mirror["l_um"],
+            "w_um": mirror["w_um"],
+        },
+    }
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -80,6 +132,7 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
 
 def pdk_revision(model_lib: Path) -> str:
     explicit = os.environ.get("SKY130_PDK_REVISION", "").strip()
@@ -92,16 +145,27 @@ def pdk_revision(model_lib: Path) -> str:
             return parts[index + 1]
     return "unknown"
 
+
 def ngspice_version(ngspice: str) -> str:
     proc = subprocess.run([ngspice, "-v"], text=True, capture_output=True)
     lines = (proc.stdout + "\n" + proc.stderr).splitlines()
     return lines[0] if lines else "unknown"
 
-def render(mode: str, corner: str, temps: list[float], output_rel: str, model_lib: Path) -> str:
-    design = load_design()
-    seed = design["nominal_characterization_seed"]
-    template = SPICE / ("ptat_sky130_mirror.template.spice" if mode == "mirror"
-                        else "ptat_sky130.template.spice")
+
+def render(
+    mode: str,
+    corner: str,
+    temps: list[float],
+    output_rel: str,
+    model_lib: Path,
+    device_linear_scale: float = 1.0,
+) -> str:
+    seed = characterization_seed(device_linear_scale)
+    template = SPICE / (
+        "ptat_sky130_mirror.template.spice"
+        if mode == "mirror"
+        else "ptat_sky130.template.spice"
+    )
     text = template.read_text(encoding="utf-8")
     replacements = {
         "__MODEL_LIB__": model_lib.as_posix(),
@@ -126,9 +190,11 @@ def render(mode: str, corner: str, temps: list[float], output_rel: str, model_li
     leftovers = PLACEHOLDER_RE.findall(text)
     if n != 1 or leftovers:
         raise RuntimeError(
-            f"template rendering failed for {mode}/{corner}; unresolved={leftovers}"
+            f"template rendering failed for {mode}/{corner}; "
+            f"unresolved={leftovers}"
         )
     return text
+
 
 def validate_csv(path: Path, temps: list[float], mode: str) -> None:
     with path.open(newline="", encoding="utf-8") as f:
@@ -136,22 +202,41 @@ def validate_csv(path: Path, temps: list[float], mode: str) -> None:
     if not rows:
         raise RuntimeError(f"{path}: no simulation rows")
     got = [float(r["temp_c"]) for r in rows]
-    if len(got) != len(temps) or any(abs(a-b) > 1e-8 for a,b in zip(got, temps)):
+    if len(got) != len(temps) or any(
+        abs(a-b) > 1e-8 for a, b in zip(got, temps)
+    ):
         raise RuntimeError(f"{path}: unexpected temperature grid")
-    required = {"temp_c","vgs_small_v","vgs_large_v","dvgs_v","supply_current_a","power_w"}
+    required = {
+        "temp_c",
+        "vgs_small_v",
+        "vgs_large_v",
+        "dvgs_v",
+        "supply_current_a",
+        "power_w",
+    }
     if mode == "mirror":
-        required |= {"branch_small_a","branch_large_a"}
+        required |= {"branch_small_a", "branch_large_a"}
     if not required.issubset(rows[0]):
         raise RuntimeError(f"{path}: missing expected columns")
 
-def run_one(mode: str, corner: str, temps: list[float], output_dir: Path,
-            model_lib: Path, ngspice: str) -> Path:
+
+def run_one(
+    mode: str,
+    corner: str,
+    temps: list[float],
+    output_dir: Path,
+    model_lib: Path,
+    ngspice: str,
+    device_linear_scale: float = 1.0,
+) -> Path:
     output_dir = output_dir.resolve()
     results_root = (ROOT/"results").resolve()
     try:
         output_dir.relative_to(results_root)
     except ValueError as exc:
-        raise ValueError("--output-dir must be inside the project results directory") from exc
+        raise ValueError(
+            "--output-dir must be inside the project results directory"
+        ) from exc
     output_dir.mkdir(parents=True, exist_ok=True)
     netdir = output_dir/"netlists"
     logdir = output_dir/"logs"
@@ -160,40 +245,87 @@ def run_one(mode: str, corner: str, temps: list[float], output_dir: Path,
     csv_path = output_dir/f"ptat_{mode}_{corner}.csv"
     output_rel = csv_path.relative_to(results_root).as_posix()
     net = netdir/f"ptat_{mode}_{corner}.spice"
-    net.write_text(render(mode, corner, temps, output_rel, model_lib), encoding="utf-8")
+    net.write_text(
+        render(
+            mode,
+            corner,
+            temps,
+            output_rel,
+            model_lib,
+            device_linear_scale=device_linear_scale,
+        ),
+        encoding="utf-8",
+    )
     ngspice_env, _ = prepare_ngspice_environment(output_dir)
     proc = subprocess.run(
         [ngspice, "-b", str(net)],
-        cwd=ROOT, text=True, capture_output=True, timeout=300, env=ngspice_env
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=300,
+        env=ngspice_env,
     )
     (logdir/f"ptat_{mode}_{corner}.log").write_text(
-        proc.stdout + "\n--- STDERR ---\n" + proc.stderr, encoding="utf-8"
+        proc.stdout + "\n--- STDERR ---\n" + proc.stderr,
+        encoding="utf-8",
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"ngspice failed for {mode}/{corner}; see {logdir}")
+        raise RuntimeError(
+            f"ngspice failed for {mode}/{corner}; see {logdir}"
+        )
     validate_csv(csv_path, temps, mode)
     return csv_path
 
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=("ideal","mirror","both"), default="both")
-    ap.add_argument("--corners", nargs="+", default=["tt","ff","ss"])
+    ap.add_argument("--mode", choices=("ideal", "mirror", "both"), default="both")
+    ap.add_argument("--corners", nargs="+", default=["tt", "ff", "ss"])
     ap.add_argument("--temps", default="-40:125:5")
-    ap.add_argument("--output-dir", type=Path, default=ROOT/"results"/"dense_pdk")
+    ap.add_argument(
+        "--device-linear-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiply sensor and mirror W and L by this factor while preserving "
+            "nominal W/L; intended for explicit sizing studies."
+        ),
+    )
+    ap.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ROOT/"results"/"dense_pdk",
+    )
     args = ap.parse_args()
-    temps = parse_temps(args.temps)
+    try:
+        seed = characterization_seed(args.device_linear_scale)
+        temps = parse_temps(args.temps)
+    except ValueError as exc:
+        print(f"SKY130 RUN: FAIL: {exc}", file=sys.stderr)
+        return 2
     ngspice = shutil.which("ngspice")
     if not ngspice:
         print("SKY130 RUN: FAIL: ngspice not found", file=sys.stderr)
         return 2
     model_lib = discover_model_lib()
-    modes = ("ideal","mirror") if args.mode == "both" else (args.mode,)
+    modes = ("ideal", "mirror") if args.mode == "both" else (args.mode,)
     outputs = []
     try:
         for mode in modes:
             for corner in args.corners:
-                outputs.append(str(run_one(mode, corner, temps, args.output_dir,
-                                           model_lib, ngspice)))
+                outputs.append(
+                    str(
+                        run_one(
+                            mode,
+                            corner,
+                            temps,
+                            args.output_dir,
+                            model_lib,
+                            ngspice,
+                            device_linear_scale=args.device_linear_scale,
+                        )
+                    )
+                )
     except Exception as exc:
         print(f"SKY130 RUN: FAIL: {exc}", file=sys.stderr)
         return 1
@@ -210,13 +342,17 @@ def main() -> int:
         "temperature_c": temps,
         "modes": list(modes),
         "corners": args.corners,
+        "device_linear_scale": args.device_linear_scale,
+        "effective_geometry": seed_geometry(seed),
         "outputs": outputs,
     }
     (args.output_dir/"run_metadata.json").write_text(
-        json.dumps(meta, indent=2, sort_keys=True)+"\n", encoding="utf-8"
+        json.dumps(meta, indent=2, sort_keys=True)+"\n",
+        encoding="utf-8",
     )
     print("SKY130 RUN: PASS")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
