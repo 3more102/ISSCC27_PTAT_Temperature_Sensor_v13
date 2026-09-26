@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "work/complete-isscc27-submission-*"
+      - "work/complete-isscc27-submission-20260926"
 
 jobs:
   dense-and-mismatch:
