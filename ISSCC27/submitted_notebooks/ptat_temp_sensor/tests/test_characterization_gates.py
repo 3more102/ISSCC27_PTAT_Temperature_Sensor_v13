@@ -304,3 +304,21 @@ def test_dense_characterization_rejects_zero_pwl_voltage_span():
             [0.05, 0.05, 0.06],
             [-40.0, 0.0, 40.0],
         )
+
+def test_dense_and_runner_reject_nonfinite_csv(tmp_path):
+    path = tmp_path / "nonfinite.csv"
+    _write_rows(path, DENSE_TEMPS)
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fieldnames = list(rows[0])
+    rows[0]["power_w"] = "nan"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match="non-finite"):
+        dense_characterization.read_xy(path)
+    with pytest.raises(RuntimeError, match="non-finite"):
+        run_sky130.validate_csv(path, DENSE_TEMPS, "mirror")
+
