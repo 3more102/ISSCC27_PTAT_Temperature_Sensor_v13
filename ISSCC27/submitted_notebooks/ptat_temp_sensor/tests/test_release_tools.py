@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 import pdk_calibration_analysis
 import readout_budget
 import run_sky130
+import mismatch_sizing_study
 
 
 def test_retained_five_point_target_is_met():
@@ -72,3 +73,55 @@ def test_sky130_render_matches_retained_micron_dimension_convention(tmp_path):
     assert "__WNS1__" not in mirror
     assert "__WNS2__" not in mirror
     assert "0.5u" not in mirror
+
+
+def test_mismatch_sizing_preserves_operating_ratios_and_scales_area():
+    base = run_sky130.load_design()
+    scaled = mismatch_sizing_study.scaled_design(base, 4.0, 8.0)
+    bseed = base["nominal_characterization_seed"]
+    sseed = scaled["nominal_characterization_seed"]
+
+    assert (
+        sseed["sensor_nmos"]["w_large_um"]
+        / sseed["sensor_nmos"]["w_small_um"]
+        == bseed["sensor_nmos"]["w_large_um"]
+        / bseed["sensor_nmos"]["w_small_um"]
+    )
+    assert (
+        sseed["sensor_nmos"]["w_small_um"] / sseed["sensor_nmos"]["l_um"]
+        == bseed["sensor_nmos"]["w_small_um"] / bseed["sensor_nmos"]["l_um"]
+    )
+    assert (
+        sseed["mirror_pmos"]["w_um"] / sseed["mirror_pmos"]["l_um"]
+        == bseed["mirror_pmos"]["w_um"] / bseed["mirror_pmos"]["l_um"]
+    )
+    assert (
+        mismatch_sizing_study.active_device_area_um2(scaled)
+        > mismatch_sizing_study.active_device_area_um2(base)
+    )
+
+
+def test_mismatch_sizing_candidate_score_prioritizes_yield_deficit():
+    better_yield = {
+        "yield_target_percent": 95.0,
+        "yield_percent_error_le_target": 95.0,
+        "yield_percent_branch_mismatch_le_target": 95.0,
+        "max_abs_error_c": {"p95": 0.49},
+    }
+    smaller_but_bad = {
+        "yield_target_percent": 95.0,
+        "yield_percent_error_le_target": 100.0,
+        "yield_percent_branch_mismatch_le_target": 50.0,
+        "max_abs_error_c": {"p95": 0.20},
+    }
+    assert mismatch_sizing_study.candidate_score(better_yield, 1000.0) < (
+        mismatch_sizing_study.candidate_score(smaller_but_bad, 10.0)
+    )
+
+
+def test_mismatch_sizing_default_seed_sets_are_disjoint():
+    screen_start, screen_samples = 2001, 16
+    validation_start, validation_samples = 5001, 100
+    screen = set(range(screen_start, screen_start + screen_samples))
+    validation = set(range(validation_start, validation_start + validation_samples))
+    assert screen.isdisjoint(validation)
