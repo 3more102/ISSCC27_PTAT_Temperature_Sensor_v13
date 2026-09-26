@@ -86,6 +86,36 @@ def check_notebook() -> tuple[bool, list[str]]:
     return not errors, errors
 
 
+def check_statistical_release_contract() -> tuple[bool, list[str]]:
+    errors: list[str] = []
+    try:
+        release = json.loads(
+            (ROOT / "release_requirements.json").read_text(encoding="utf-8")
+        )
+        targets = release["release_targets"]
+    except Exception as exc:
+        return False, [f"cannot parse release confidence contract: {exc}"]
+
+    if targets.get("mismatch_confidence_level_percent") != 95:
+        errors.append(
+            "mismatch confidence level must remain 95 percent"
+        )
+    if (
+        targets.get(
+            "mismatch_wilson_lower_bound_must_meet_yield_target"
+        )
+        is not True
+    ):
+        errors.append(
+            "mismatch release review must require the Wilson lower bound"
+        )
+    if int(targets.get("mismatch_min_samples", 0)) < 100:
+        errors.append(
+            "mismatch release review must retain at least 100 samples"
+        )
+    return not errors, errors
+
+
 def main():
     ok = True
     required = [
@@ -108,6 +138,15 @@ def main():
     for error in notebook_errors:
         print("       -", error)
     ok &= notebook_ok
+
+    confidence_ok, confidence_errors = check_statistical_release_contract()
+    print(
+        ("[PASS] " if confidence_ok else "[FAIL] ")
+        + "statistical release-review contract"
+    )
+    for error in confidence_errors:
+        print("       -", error)
+    ok &= confidence_ok
 
     ok &= run("retained evidence audit", sys.executable, "evidence_audit.py")
     ok &= run(
