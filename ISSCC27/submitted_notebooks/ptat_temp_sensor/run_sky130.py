@@ -84,6 +84,8 @@ def load_design() -> dict:
 def characterization_seed(
     linear_scale: float = 1.0,
     *,
+    sensor_linear_scale: float | None = None,
+    mirror_linear_scale: float | None = None,
     vdd_v: float | None = None,
     branch_current_a: float | None = None,
     reference_current_a: float | None = None,
@@ -97,6 +99,16 @@ def characterization_seed(
     """
     if not math_isfinite_positive(linear_scale):
         raise ValueError("device linear scale must be a finite positive number")
+    sensor_scale = (
+        linear_scale if sensor_linear_scale is None else sensor_linear_scale
+    )
+    mirror_scale = (
+        linear_scale if mirror_linear_scale is None else mirror_linear_scale
+    )
+    if not math_isfinite_positive(sensor_scale):
+        raise ValueError("sensor linear scale must be a finite positive number")
+    if not math_isfinite_positive(mirror_scale):
+        raise ValueError("mirror linear scale must be a finite positive number")
     seed = copy.deepcopy(load_design()["nominal_characterization_seed"])
     overrides = {
         "vdd_v": vdd_v,
@@ -111,11 +123,11 @@ def characterization_seed(
         seed[key] = float(value)
     sensor = seed["sensor_nmos"]
     mirror = seed["mirror_pmos"]
-    sensor["l_um"] *= linear_scale
-    sensor["w_small_um"] *= linear_scale
-    sensor["w_large_um"] *= linear_scale
-    mirror["l_um"] *= linear_scale
-    mirror["w_um"] *= linear_scale
+    sensor["l_um"] *= sensor_scale
+    sensor["w_small_um"] *= sensor_scale
+    sensor["w_large_um"] *= sensor_scale
+    mirror["l_um"] *= mirror_scale
+    mirror["w_um"] *= mirror_scale
     return seed
 
 
@@ -185,12 +197,16 @@ def render(
     model_lib: Path,
     device_linear_scale: float = 1.0,
     *,
+    sensor_linear_scale: float | None = None,
+    mirror_linear_scale: float | None = None,
     vdd_v: float | None = None,
     branch_current_a: float | None = None,
     reference_current_a: float | None = None,
 ) -> str:
     seed = characterization_seed(
         device_linear_scale,
+        sensor_linear_scale=sensor_linear_scale,
+        mirror_linear_scale=mirror_linear_scale,
         vdd_v=vdd_v,
         branch_current_a=branch_current_a,
         reference_current_a=reference_current_a,
@@ -276,6 +292,8 @@ def run_one(
     ngspice: str,
     device_linear_scale: float = 1.0,
     *,
+    sensor_linear_scale: float | None = None,
+    mirror_linear_scale: float | None = None,
     vdd_v: float | None = None,
     branch_current_a: float | None = None,
     reference_current_a: float | None = None,
@@ -304,6 +322,8 @@ def run_one(
             output_rel,
             model_lib,
             device_linear_scale=device_linear_scale,
+            sensor_linear_scale=sensor_linear_scale,
+            mirror_linear_scale=mirror_linear_scale,
             vdd_v=vdd_v,
             branch_current_a=branch_current_a,
             reference_current_a=reference_current_a,
@@ -361,6 +381,22 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--sensor-linear-scale",
+        type=float,
+        help=(
+            "Override sensor-only W/L-preserving linear scale; "
+            "defaults to --device-linear-scale."
+        ),
+    )
+    ap.add_argument(
+        "--mirror-linear-scale",
+        type=float,
+        help=(
+            "Override mirror-only W/L-preserving linear scale; "
+            "defaults to --device-linear-scale."
+        ),
+    )
+    ap.add_argument(
         "--output-dir",
         type=Path,
         default=ROOT/"results"/"dense_pdk",
@@ -369,6 +405,8 @@ def main() -> int:
     try:
         seed = characterization_seed(
             args.device_linear_scale,
+            sensor_linear_scale=args.sensor_linear_scale,
+            mirror_linear_scale=args.mirror_linear_scale,
             vdd_v=args.vdd_v,
             branch_current_a=args.branch_current_a,
             reference_current_a=args.reference_current_a,
@@ -397,6 +435,8 @@ def main() -> int:
                             model_lib,
                             ngspice,
                             device_linear_scale=args.device_linear_scale,
+                            sensor_linear_scale=args.sensor_linear_scale,
+                            mirror_linear_scale=args.mirror_linear_scale,
                             vdd_v=args.vdd_v,
                             branch_current_a=args.branch_current_a,
                             reference_current_a=args.reference_current_a,
@@ -420,6 +460,16 @@ def main() -> int:
         "modes": list(modes),
         "corners": args.corners,
         "device_linear_scale": args.device_linear_scale,
+        "sensor_linear_scale": (
+            args.device_linear_scale
+            if args.sensor_linear_scale is None
+            else args.sensor_linear_scale
+        ),
+        "mirror_linear_scale": (
+            args.device_linear_scale
+            if args.mirror_linear_scale is None
+            else args.mirror_linear_scale
+        ),
         "effective_geometry": seed_geometry(seed),
         "operating_point": {
             "vdd_v": seed["vdd_v"],
