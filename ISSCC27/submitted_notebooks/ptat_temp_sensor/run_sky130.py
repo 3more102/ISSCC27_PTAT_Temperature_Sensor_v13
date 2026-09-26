@@ -56,6 +56,21 @@ def discover_model_lib() -> Path:
         "Cannot locate sky130.lib.spice. Set SKY130_MODEL_LIB or PDK_ROOT."
     )
 
+def prepare_ngspice_environment(output_dir: Path) -> tuple[dict[str, str], Path]:
+    """Create an isolated ngspice HOME with the SKY130 compatibility mode enabled.
+
+    SKY130's sectioned .lib model deck requires ngspice compatibility parsing.
+    Keeping the initialization local to generated evidence avoids depending on a
+    user's global ~/.spiceinit and makes CI/local behavior reproducible.
+    """
+    runtime_home = (output_dir / "ngspice_home").resolve()
+    runtime_home.mkdir(parents=True, exist_ok=True)
+    spiceinit = runtime_home / ".spiceinit"
+    spiceinit.write_text("set ngbehavior=hsa\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["HOME"] = str(runtime_home)
+    return env, spiceinit
+
 def load_design() -> dict:
     return json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
 
@@ -75,8 +90,6 @@ def render(mode: str, corner: str, temps: list[float], output_rel: str, model_li
         "__LNS__": str(seed["sensor_nmos"]["l_um"])+"u",
         "__W1__": str(seed["sensor_nmos"]["w_small_um"])+"u",
         "__W2__": str(seed["sensor_nmos"]["w_large_um"])+"u",
-        "__WNS1__": str(seed["sensor_nmos"]["w_small_um"])+"u",
-        "__WNS2__": str(seed["sensor_nmos"]["w_large_um"])+"u",
         "__LPM__": str(seed["mirror_pmos"]["l_um"])+"u",
         "__WPM__": str(seed["mirror_pmos"]["w_um"])+"u",
         "__OUTPUT_CSV__": output_rel,
@@ -123,9 +136,10 @@ def run_one(mode: str, corner: str, temps: list[float], output_dir: Path,
     output_rel = csv_path.relative_to(results_root).as_posix()
     net = netdir/f"ptat_{mode}_{corner}.spice"
     net.write_text(render(mode, corner, temps, output_rel, model_lib), encoding="utf-8")
+    ngspice_env, _ = prepare_ngspice_environment(output_dir)
     proc = subprocess.run(
         [ngspice, "-b", str(net)],
-        cwd=ROOT, text=True, capture_output=True, timeout=300
+        cwd=ROOT, text=True, capture_output=True, timeout=300, env=ngspice_env
     )
     (logdir/f"ptat_{mode}_{corner}.log").write_text(
         proc.stdout + "\n--- STDERR ---\n" + proc.stderr, encoding="utf-8"
@@ -164,6 +178,7 @@ def main() -> int:
         "status": "PASS",
         "model_library": str(model_lib),
         "ngspice": lines[0] if lines else "unknown",
+        "ngspice_compatibility_mode": "hsa",
         "temperature_c": temps,
         "modes": list(modes),
         "corners": args.corners,
