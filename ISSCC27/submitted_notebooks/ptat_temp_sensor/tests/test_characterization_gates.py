@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 import dense_characterization
 import mismatch_mc
+import run_sky130
 
 
 DENSE_TEMPS = [float(t) for t in range(-40, 126, 5)]
