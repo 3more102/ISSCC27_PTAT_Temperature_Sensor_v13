@@ -36,3 +36,10 @@ def test_behavioral_readout_budget_passes():
         r["worst_quantized_pwl_sampled_error_c"]
         <= r["quantized_sampled_grid_target_c"]
     )
+
+
+def test_notebook_submission_structure_is_explicit():
+    import submission_preflight
+
+    ok, errors = submission_preflight.check_notebook()
+    assert ok, errors
