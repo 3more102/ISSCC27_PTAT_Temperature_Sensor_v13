@@ -17,7 +17,7 @@ import run_sky130
 ROOT=Path(__file__).resolve().parent
 RELEASE=json.loads((ROOT/"release_requirements.json").read_text(encoding="utf-8"))
 DESIGN=json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
-ANCHORS=[float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
+DEFAULT_ANCHORS=[float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
 BRANCH_MISMATCH_TARGET=float(DESIGN["mirror_branch_mismatch_percent_max"])
 PLACEHOLDER_RE=re.compile(r"__[A-Z][A-Z0-9_]*__")
 
@@ -118,7 +118,7 @@ def analyze(files:list[Path],temps:list[float])->dict:
         got=[r["temp_c"] for r in rows]
         if len(got)!=len(temps) or any(abs(a-b)>1e-8 for a,b in zip(got,temps)):
             raise ValueError(f"{f}: temperature grid mismatch")
-        err=pwl_errors(rows)
+        err=pwl_errors(rows,anchors)
         maxerr=max(abs(x) for x in err)
         rms=math.sqrt(sum(x*x for x in err)/len(err))
         mm=max(branch_mismatch_percent(r["branch_small_a"],r["branch_large_a"])
@@ -145,7 +145,8 @@ def analyze(files:list[Path],temps:list[float])->dict:
         "evidence_class":"SKY130/open_pdks local device mismatch via tt_mm; simulation only",
         "samples":len(samples),
         "minimum_samples_target":min_samples,
-        "calibration":"per-sample fixed five-point PWL at release anchors",
+        "calibration":"per-sample fixed PWL at explicit calibration anchors",
+        "calibration_anchors_c":anchors,
         "temperature_c":temps,
         "yield_percent_error_le_target":yield_pct,
         "yield_percent_branch_mismatch_le_target":branch_yield_pct,
@@ -167,6 +168,16 @@ def main()->int:
     ap.add_argument("--jobs",type=int,default=1)
     ap.add_argument("--temps",default="-40:125:5")
     ap.add_argument("--output-dir",type=Path,default=ROOT/"results"/"mismatch_mc")
+    ap.add_argument(
+        "--anchors",
+        default=",".join(f"{x:g}" for x in DEFAULT_ANCHORS),
+        help="comma-separated calibration anchors in degC; must exist in --temps",
+    )
+    ap.add_argument(
+        "--report-only",
+        action="store_true",
+        help="return success when simulation/evidence generation succeeds even if targets miss",
+    )
     args=ap.parse_args()
     if args.samples<2:
         print("MISMATCH MC: FAIL: at least 2 samples required"); return 2
@@ -200,7 +211,7 @@ def main()->int:
                 ]
                 files=[future.result() for future in as_completed(futures)]
             files.sort()
-        result=analyze(files,temps)
+        result=analyze(files,temps,anchors)
         result["parallel_jobs"]=args.jobs
         result["provenance"]={
             "ngspice":run_sky130.ngspice_version(ngspice),
