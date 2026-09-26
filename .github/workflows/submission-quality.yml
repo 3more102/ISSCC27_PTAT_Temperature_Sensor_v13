@@ -163,6 +163,8 @@ jobs:
             --input-dir results/dense_sizing_candidate \
             --output results/dense_sizing_candidate_analysis.json \
             --allow-fail
+      - name: Summarize sizing candidate qualification
+        run: python sizing_candidate_qualification.py
       - name: Archive generated evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -178,3 +180,4 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/sizing_candidate_qualification.json
