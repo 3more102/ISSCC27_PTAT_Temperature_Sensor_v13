@@ -25,8 +25,8 @@ Verified on 2026-09-26.
 - [x] Final calibration architecture is explicitly defined as five-point PWL.
 - [x] Two-point target miss is disclosed rather than hidden.
 - [x] Submission preflight and unit tests run in GitHub Actions.
-- [ ] New dense-grid transistor simulation: workflow/harness present; promote only after successful retained run.
-- [ ] Real PDK local-mismatch Monte Carlo: workflow/harness present; promote only after successful retained run.
+- [x] New dense-grid transistor simulation completed and retained: 5 °C TT/FF/SS grid, worst five-point PWL error 0.472 °C, target PASS.
+- [x] Real PDK local-mismatch Monte Carlo completed and retained: 100 seeds; current design FAILS internal statistical targets (66% error yield, 4% branch-mismatch yield).
 - [ ] Layout/DRC/LVS/PEX: optional for Code-a-Chip and not currently claimed.
 - [ ] Create/fetch the user fork of `sscs-ose/sscs-ose-code-a-chip.github.io`.
 - [ ] Copy/update only this project directory in the competition fork; do not copy this repository's `.github/` workflows into the upstream competition PR.

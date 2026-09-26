@@ -75,24 +75,41 @@ or:
 
     make submission-preflight
 
-## Generate new dense real-PDK evidence
+## Dense real-PDK verification
 
-Install ngspice and the matching SKY130/open_pdks build, set `PDK_ROOT`, then:
+A new pinned-PDK run completed on a **5 °C grid from −40 to 125 °C** across
+TT/FF/SS and both ideal-current and PMOS-mirror configurations. The fixed
+five-point PWL release calibration achieved a worst sampled-grid error of
+**0.472 °C**, so the deterministic dense-grid target passed.
+
+The compact retained record is in
+`results/full_pdk_20260926/dense_pdk_analysis.json`; it names the workflow,
+source commit, artifact, ngspice version, and PDK revision.
+
+Reproduce it with:
 
     python run_sky130.py --mode both --corners tt ff ss --temps=-40:125:5
     python dense_characterization.py
 
-The dense analysis scores only actual transistor-simulation samples; it does not
-interpolate between them.
+## Real local-mismatch Monte Carlo
 
-## Run real local-mismatch Monte Carlo
+A 100-seed SKY130 `tt_mm` Monte Carlo run is now retained. With the release
+five-point calibration it produced:
 
-The mismatch runner uses the PDK `tt_mm` library section and launches one
-ngspice process per die/sample:
+- **66%** error yield at ≤0.5 °C versus the internal 95% target;
+- **0.962 °C** p95 maximum absolute error;
+- **1.124 °C** worst maximum absolute error;
+- **4%** branch-mismatch yield at ≤1%.
 
-    python mismatch_mc.py --samples 100 --temps=-40:125:5
+Therefore the statistical mismatch target is **not met** by the current
+transistor sizing. This is reported as a negative engineering result, not
+converted into a passing claim. The per-seed metrics and provenance are retained
+under `results/full_pdk_20260926/`.
 
-It fails closed if variation across seeds is effectively zero.
+A discovery-only six-point schedule
+**−40, −25, −5, 25, 65, 125 °C** improved error yield to **98%** on those same
+100 samples. It is not part of the release architecture because it still
+requires independent-seed validation.
 
 ## Physical implementation
 
