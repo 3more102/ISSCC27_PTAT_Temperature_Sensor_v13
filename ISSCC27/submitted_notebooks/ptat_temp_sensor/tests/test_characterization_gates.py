@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 import calibration_candidate_validation
 import dense_characterization
 import mismatch_mc
+import mismatch_sizing_sweep
 import run_sky130
 
 
@@ -242,3 +243,8 @@ def test_calibration_candidate_status_guard_accepts_only_unpromoted_states():
     assert guard("RETROSPECTIVE_SPLIT_ROBUSTNESS_PASS_NOT_RELEASE_VALIDATED")
     assert not guard("RELEASE_VALIDATED")
     assert not guard(None)
+
+
+def test_sizing_validation_seed_ranges_must_be_disjoint():
+    assert mismatch_sizing_sweep.seed_ranges_overlap(3001, 12, 3010, 100)
+    assert not mismatch_sizing_sweep.seed_ranges_overlap(3001, 12, 9001, 100)
