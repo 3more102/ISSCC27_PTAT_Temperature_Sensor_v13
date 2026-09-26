@@ -79,6 +79,26 @@ def require_matching_provenance(sweep: dict, metadata: dict) -> dict:
     return {key: sweep_provenance[key] for key in PROVENANCE_KEYS}
 
 
+def require_readout_provenance(
+    readout: dict, metadata: dict
+) -> dict:
+    provenance = readout.get("provenance")
+    if not isinstance(provenance, dict):
+        raise QualificationError("candidate readout is missing provenance")
+    missing = [key for key in PROVENANCE_KEYS if not provenance.get(key)]
+    if missing:
+        raise QualificationError(
+            f"candidate readout provenance is incomplete: {missing}"
+        )
+    for key in PROVENANCE_KEYS:
+        if provenance[key] != metadata.get(key):
+            raise QualificationError(
+                f"readout {key} provenance mismatch: "
+                f"readout={provenance[key]!r}, dense={metadata.get(key)!r}"
+            )
+    return {key: provenance[key] for key in PROVENANCE_KEYS}
+
+
 def number(label: str, value: object, *, minimum: float = 0.0,
            maximum: float = math.inf) -> float:
     """Reject malformed metrics before comparing them with release targets."""
@@ -104,6 +124,7 @@ def analyze(
     sweep: dict,
     dense: dict | None,
     metadata: dict | None,
+    readout: dict | None,
     nominal_reference_current_a: float,
 ) -> dict:
     selected = sweep.get("recommended_for_independent_validation")
@@ -129,6 +150,8 @@ def analyze(
         raise QualificationError("validation candidate differs from selected candidate")
     if dense is None or metadata is None:
         raise QualificationError("selected candidate lacks dense-corner evidence")
+    if readout is None:
+        raise QualificationError("selected candidate lacks readout evidence")
 
     expected_iref = (
         float(nominal_reference_current_a) * float(selected["iref_scale"])
@@ -155,6 +178,7 @@ def analyze(
         selected["mirror_linear_scale"],
     )
     provenance = require_matching_provenance(sweep, metadata)
+    readout_provenance = require_readout_provenance(readout, metadata)
 
     # PASS labels are insufficient: reapply the current release contract to
     # the retained numbers and the actual discovery/validation seed ranges.
@@ -212,8 +236,52 @@ def analyze(
         and dense.get("anchors_c")
         == release["release_architecture"]["calibration_anchors_c"]
     )
+    readout_bits = positive_integer("readout bits", readout["bits"])
+    readout_vref = number("readout VREF", readout["vref_v"])
+    readout_gain = number("readout analog gain", readout["analog_gain"])
+    readout_qrms = number(
+        "readout quantization RMS",
+        readout["worst_quantization_rms_c"],
+    )
+    readout_utilization = number(
+        "readout full-scale utilization",
+        readout["worst_full_scale_utilization"],
+    )
+    readout_error = number(
+        "readout quantized PWL error",
+        readout["worst_quantized_pwl_sampled_error_c"],
+    )
+    readout_pass = (
+        readout.get("status") == "PASS"
+        and readout.get("anchors_c")
+        == release["release_architecture"]["calibration_anchors_c"]
+        and readout_bits == int(design["adc"]["bits"])
+        and math.isclose(
+            readout_vref,
+            float(design["adc"]["vref_v"]),
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        )
+        and math.isclose(
+            readout_gain,
+            float(release["release_architecture"]["analog_gain"]),
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        )
+        and readout_qrms
+        <= float(targets["adc_quantization_rms_c_max"])
+        and readout_utilization
+        <= float(targets["adc_full_scale_utilization_max"])
+        and readout_error
+        <= float(
+            targets["quantized_sampled_grid_pwl_max_abs_error_c_max"]
+        )
+    )
     qualified = bool(
-        mismatch_pass and validation_headroom_pass and dense_pass
+        mismatch_pass
+        and validation_headroom_pass
+        and dense_pass
+        and readout_pass
     )
 
     return {
@@ -248,9 +316,20 @@ def analyze(
             "disjoint_validation_seeds": independent_seeds,
             "independent_headroom_pass": validation_headroom_pass,
             "dense_tt_ff_ss_pass": dense_pass,
+            "readout_pass": readout_pass,
             "provenance_match": True,
+            "readout_provenance_match": readout_provenance == provenance,
         },
         "provenance": provenance,
+        "readout": {
+            "status": readout.get("status"),
+            "bits": readout_bits,
+            "vref_v": readout_vref,
+            "analog_gain": readout_gain,
+            "worst_quantization_rms_c": readout_qrms,
+            "worst_full_scale_utilization": readout_utilization,
+            "worst_quantized_pwl_sampled_error_c": readout_error,
+        },
         "dense_tt_ff_ss": {
             "status": dense.get("status"),
             "anchors_c": dense.get("anchors_c"),
@@ -284,6 +363,11 @@ def main() -> int:
         default=ROOT / "results" / "dense_sizing_candidate" / "run_metadata.json",
     )
     parser.add_argument(
+        "--readout-analysis",
+        type=Path,
+        default=ROOT / "results" / "dense_sizing_candidate_readout.json",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / "results" / "sizing_candidate_qualification.json",
@@ -301,10 +385,17 @@ def main() -> int:
         selected = sweep.get("recommended_for_independent_validation")
         dense = load_json(args.dense_analysis) if selected is not None else None
         metadata = load_json(args.dense_metadata) if selected is not None else None
+        readout = (
+            load_json(args.readout_analysis)
+            if selected is not None
+            else None
+        )
         nominal_iref = float(
             design["nominal_characterization_seed"]["reference_current_a"]
         )
-        result = analyze(sweep, dense, metadata, nominal_iref)
+        result = analyze(
+            sweep, dense, metadata, readout, nominal_iref
+        )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n",
