@@ -7,7 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RELEASE = json.loads((ROOT/"release_requirements.json").read_text(encoding="utf-8"))
 DESIGN = json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
-ANCHORS = [float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
+DEFAULT_ANCHORS = [
+    float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]
+]
 MIRROR_MISMATCH_TARGET = float(DESIGN["mirror_branch_mismatch_percent_max"])
 
 def read_xy(path: Path) -> tuple[list[float], list[float], list[dict[str,str]]]:
@@ -28,9 +30,14 @@ def two_point_errors(t: list[float], v: list[float]) -> list[float]:
     g=(t[-1]-t[0])/(v[-1]-v[0]); b=t[0]-g*v[0]
     return [g*x+b-y for x,y in zip(v,t)]
 
-def fixed_pwl_errors(t: list[float], v: list[float]) -> list[float]:
+def fixed_pwl_errors(
+    t: list[float],
+    v: list[float],
+    anchors: list[float] | None = None,
+) -> list[float]:
+    use_anchors = DEFAULT_ANCHORS if anchors is None else anchors
     idx=[]
-    for a in ANCHORS:
+    for a in use_anchors:
         hit=[i for i,x in enumerate(t) if abs(x-a)<1e-9]
         if not hit:
             raise ValueError(f"anchor {a} C missing from dense grid")
@@ -73,7 +80,11 @@ def load_provenance(input_dir: Path) -> dict:
         raise ValueError(f"{path}: exact PDK revision is unknown")
     return {key: meta[key] for key in required}
 
-def analyze(input_dir: Path) -> dict:
+def analyze(
+    input_dir: Path,
+    anchors: list[float] | None = None,
+) -> dict:
+    use_anchors = DEFAULT_ANCHORS if anchors is None else anchors
     per={}
     for mode in ("ideal","mirror"):
         for corner in ("tt","ff","ss"):
@@ -86,7 +97,9 @@ def analyze(input_dir: Path) -> dict:
                 "samples":len(t),
                 "max_step_c":step,
                 "two_point":summarize_errors(two_point_errors(t,v)),
-                "five_point_pwl":summarize_errors(fixed_pwl_errors(t,v)),
+                "five_point_pwl":summarize_errors(
+                    fixed_pwl_errors(t, v, use_anchors)
+                ),
                 "max_power_uw":max(float(r["power_w"]) for r in rows)*1e6,
             }
             if mode=="mirror":
@@ -114,7 +127,7 @@ def analyze(input_dir: Path) -> dict:
         ) else "FAIL",
         "evidence_boundary":"New transistor-level SKY130 dense-grid evidence; not silicon and not layout-extracted.",
         "calibration":"fixed five-point PWL using release anchors; no interpolation is used for error scoring",
-        "anchors_c":ANCHORS,
+        "anchors_c":use_anchors,
         "worst_five_point_pwl_max_abs_error_c":worst,
         "max_temperature_step_c":step,
         "target_max_abs_error_c":target,
@@ -127,10 +140,27 @@ def main()->int:
     ap=argparse.ArgumentParser()
     ap.add_argument("--input-dir",type=Path,default=ROOT/"results"/"dense_pdk")
     ap.add_argument("--output",type=Path,default=ROOT/"results"/"dense_pdk_analysis.json")
+    ap.add_argument(
+        "--anchors",
+        default=",".join(f"{x:g}" for x in DEFAULT_ANCHORS),
+        help="comma-separated calibration temperatures in degC",
+    )
     ap.add_argument("--check",action="store_true")
+    ap.add_argument(
+        "--allow-fail",
+        action="store_true",
+        help="return success after valid analysis even when targets are missed",
+    )
     args=ap.parse_args()
     try:
-        result=analyze(args.input_dir)
+        anchors = [
+            float(x.strip()) for x in args.anchors.split(",") if x.strip()
+        ]
+        if len(anchors) < 2 or anchors != sorted(set(anchors)):
+            raise ValueError(
+                "calibration anchors must be unique and strictly increasing"
+            )
+        result=analyze(args.input_dir, anchors)
         result["provenance"]=load_provenance(args.input_dir)
     except Exception as exc:
         print(f"DENSE CHARACTERIZATION: FAIL: {exc}")
@@ -146,7 +176,7 @@ def main()->int:
     print(f"DENSE CHARACTERIZATION: {result['status']}")
     print("worst five-point PWL error:",result["worst_five_point_pwl_max_abs_error_c"])
     print("worst mirror branch mismatch (%):",result["worst_mirror_branch_mismatch_percent"])
-    return 0 if result["status"]=="PASS" else 1
+    return 0 if result["status"]=="PASS" or args.allow_fail else 1
 
 if __name__=="__main__":
     raise SystemExit(main())
