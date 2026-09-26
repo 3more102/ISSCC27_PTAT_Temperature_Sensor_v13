@@ -8,10 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import dense_characterization
-import mismatch_mc
-import run_sky130
-
+import calibration_candidate_validation\nimport dense_characterization\nimport mismatch_mc\nimport run_sky130\n
 
 DENSE_TEMPS = [float(t) for t in range(-40, 126, 5)]
 ANCHOR_TEMPS = [-40.0, -20.0, 0.0, 50.0, 125.0]
@@ -155,3 +152,24 @@ def test_mismatch_render_scales_w_and_l_together(tmp_path):
     assert "LPM=3.0 WPM=12.0" in rendered
     assert "__WNS1__" not in rendered
     assert "__WPM__" not in rendered
+
+
+def test_candidate_validation_keeps_branch_mismatch_separate(tmp_path):
+    first = tmp_path / "sample_02001.csv"
+    second = tmp_path / "sample_02002.csv"
+    _write_rows(first, DENSE_TEMPS, offset=0.0, branch_ratio=1.0)
+    _write_rows(second, DENSE_TEMPS, offset=1.0e-3, branch_ratio=1.02)
+
+    result = calibration_candidate_validation.analyze(
+        files=[first, second],
+        baseline_anchors_c=[-40.0, -20.0, 0.0, 50.0, 125.0],
+        candidate_anchors_c=[-40.0, -25.0, -5.0, 25.0, 65.0, 125.0],
+        error_target_c=0.5,
+        branch_target_percent=1.0,
+        yield_target_percent=95.0,
+        minimum_samples=2,
+    )
+    assert result["status"] == "PASS"
+    assert result["candidate"]["yield_percent_le_target"] == pytest.approx(100.0)
+    assert result["branch_mismatch"]["status"] == "FAIL"
+    assert result["branch_mismatch"]["yield_percent_le_target"] == pytest.approx(50.0)
