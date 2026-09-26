@@ -27,7 +27,8 @@ with digital one-point and two-point calibration, analytical/readout co-design, 
 | Real SKY130 TT/FF/SS ideal-bias | **PASS — retained CI run 221 evidence** |
 | Real SKY130 TT/FF/SS PMOS-mirror | **PASS — retained CI run 221 evidence** |
 | Real PDK power characterization | **PASS for characterized testbench/core only** |
-| Evidence-integrity recomputation | **PASS locally on this change; enforced by CI** |
+| Evidence-integrity recomputation | **PASS — enforced by CI** |
+| Retained-PDK calibration post-processing | **PASS — CI checked; sampled-point scope only** |
 | Statistical PDK mismatch Monte-Carlo | NOT CLAIMED |
 | Silicon measurements | NOT AVAILABLE |
 | Layout DRC/LVS | NOT CLAIMED AS PASS |
@@ -85,6 +86,24 @@ The audit fails closed if:
 - the retained headroom or mirror-mismatch engineering target is violated.
 
 GitHub Actions runs the same audit on pull requests and pushes.
+
+## Retained-PDK calibration post-processing
+
+The six retained run-221 datasets (ideal-bias and PMOS-mirror at TT/FF/SS) were post-processed with deterministic digital calibration. This adds **no new transistor simulation**.
+
+- Endpoint two-point calibration at −40 °C and 125 °C: worst absolute error across the retained temperature samples = **4.600 °C**.
+- Exhaustive five-point piecewise-linear search, with the endpoints fixed, selected anchors **−40, −20, 0, 50, 125 °C**.
+- With those anchors, the worst absolute error across all six datasets at the eight retained temperature samples is **0.472 °C**.
+- Worst RMS error across those retained sampled points is **0.212 °C**.
+
+Reproduce or verify:
+
+```bash
+python pdk_calibration_analysis.py
+python pdk_calibration_analysis.py --check
+```
+
+The retained machine-readable result is `results/pdk_calibration_analysis.json`. The **0.472 °C result is a sampled-grid post-processing result only**; it is not a silicon result, statistical mismatch result, layout result, or a bound between unsampled temperatures.
 
 ## Important limitations
 
