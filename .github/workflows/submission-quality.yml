@@ -64,7 +64,7 @@ jobs:
         run: pytest --nbmake PTAT_Temperature_Sensor_Code_a_Chip.ipynb
 
   full-pdk-verification:
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 3
+    if: >-\n      (github.event_name == 'pull_request' && github.event.pull_request.number == 3) ||\n      (github.event_name == 'push' && github.ref == 'refs/heads/work/isscc-pdk-validation-20260926')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
