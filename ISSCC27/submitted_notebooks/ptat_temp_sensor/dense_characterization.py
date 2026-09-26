@@ -44,6 +44,8 @@ def fixed_pwl_errors(
         idx.append(hit[0])
     est=[math.nan]*len(t)
     for ia,ib in zip(idx[:-1],idx[1:]):
+        if v[ib] == v[ia]:
+            raise ValueError("zero PWL voltage span")
         g=(t[ib]-t[ia])/(v[ib]-v[ia]); b=t[ia]-g*v[ia]
         for j in range(ia,ib+1):
             est[j]=g*v[j]+b
@@ -130,8 +132,14 @@ def analyze(
             and worst_mirror_mismatch<=MIRROR_MISMATCH_TARGET
         ) else "FAIL",
         "evidence_boundary":"New transistor-level SKY130 dense-grid evidence; not silicon and not layout-extracted.",
-        "calibration":"fixed five-point PWL using release anchors; no interpolation is used for error scoring",
+        "calibration":(
+            f"fixed {len(use_anchors)}-point PWL using explicit anchors; "
+            "no interpolation is used for error scoring"
+        ),
+        "uses_release_anchors":use_anchors == DEFAULT_ANCHORS,
+        "calibration_anchor_count":len(use_anchors),
         "anchors_c":use_anchors,
+        "worst_pwl_max_abs_error_c":worst,
         "worst_five_point_pwl_max_abs_error_c":worst,
         "max_temperature_step_c":step,
         "target_max_abs_error_c":target,
