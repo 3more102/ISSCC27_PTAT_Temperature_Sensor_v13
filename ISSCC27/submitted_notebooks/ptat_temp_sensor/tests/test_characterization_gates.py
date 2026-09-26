@@ -86,6 +86,8 @@ def test_mismatch_mc_requires_branch_mismatch_yield(monkeypatch, tmp_path):
     result = mismatch_mc.analyze([first, second], ANCHOR_TEMPS)
     assert result["yield_percent_error_le_target"] == pytest.approx(100.0)
     assert result["yield_percent_branch_mismatch_le_target"] == pytest.approx(50.0)
+    assert result["error_yield_status"] == "PASS"
+    assert result["branch_mismatch_yield_status"] == "FAIL"
     assert result["status"] == "FAIL"
 
 
