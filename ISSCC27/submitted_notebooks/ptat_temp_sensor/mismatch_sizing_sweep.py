@@ -173,7 +173,13 @@ def main() -> int:
         print("MISMATCH SIZING SWEEP: FAIL: ngspice not found")
         return 2
 
-    # Keep the screen compact but reach the geometry range implied by the\n    # baseline branch-mismatch distribution.  The current 1x mirror has a\n    # retained p95 max branch mismatch above 20%, so stopping at 4x linear\n    # scale is unlikely to test whether the 1% internal target is reachable.\n    iref_scales = (1.0, 10.0)\n    mirror_scales = (1.0, 4.0, 8.0, 16.0, 24.0)\n    sensor_scales = (1.0, 2.0)
+    # Keep the screen compact but reach the geometry range implied by the
+    # baseline branch-mismatch distribution.  The current 1x mirror has a
+    # retained p95 max branch mismatch above 20%, so stopping at 4x linear
+    # scale is unlikely to test whether the 1% internal target is reachable.
+    iref_scales = (1.0, 10.0)
+    mirror_scales = (1.0, 4.0, 8.0, 16.0, 24.0)
+    sensor_scales = (1.0, 2.0)
     try:
         model = run_sky130.discover_model_lib()
         candidates = []
@@ -227,7 +233,20 @@ def main() -> int:
         print(f"MISMATCH SIZING SWEEP: FAIL: {exc}", file=sys.stderr)
         return 1
 
-    ranked = sorted(\n        candidates,\n        key=lambda x: (\n            -min(\n                x["branch_yield_percent"],\n                x["error_yield_percent"],\n            ),\n            -x["error_yield_percent"],\n            -x["branch_yield_percent"],\n            x["p95_max_error_c"],\n            x["p95_max_branch_mismatch_percent"],\n            x["worst_max_power_uw"],\n        ),\n    )
+    ranked = sorted(
+        candidates,
+        key=lambda x: (
+            -min(
+                x["branch_yield_percent"],
+                x["error_yield_percent"],
+            ),
+            -x["error_yield_percent"],
+            -x["branch_yield_percent"],
+            x["p95_max_error_c"],
+            x["p95_max_branch_mismatch_percent"],
+            x["worst_max_power_uw"],
+        ),
+    )
     summary = {
         "status": "EXPLORATORY_ONLY",
         "evidence_class": (
