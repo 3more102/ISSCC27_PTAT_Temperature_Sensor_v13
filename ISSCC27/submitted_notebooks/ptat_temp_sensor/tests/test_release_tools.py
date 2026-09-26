@@ -188,8 +188,8 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
         "status": "PASS",
         "samples": 100,
         "seed_start": 9001,
-        "error_yield_percent": 97.0,
-        "branch_yield_percent": 96.0,
+        "error_yield_percent": 100.0,
+        "branch_yield_percent": 100.0,
         "headroom_pass": True,
         "min_sensor_headroom_v": 0.5,
     }
