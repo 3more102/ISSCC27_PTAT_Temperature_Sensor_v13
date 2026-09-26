@@ -163,6 +163,17 @@ jobs:
             --input-dir results/dense_sizing_candidate \
             --output results/dense_sizing_candidate_analysis.json \
             --allow-fail
+      - name: Behavioral readout validation of selected sizing candidate
+        shell: bash
+        run: |
+          if [ ! -f results/dense_sizing_candidate/run_metadata.json ]; then
+            echo "No sizing candidate dense evidence; readout validation skipped"
+            exit 0
+          fi
+          python readout_budget.py \
+            --input-dir results/dense_sizing_candidate \
+            --output results/dense_sizing_candidate_readout.json \
+            --allow-fail
       - name: Summarize sizing candidate qualification
         run: python sizing_candidate_qualification.py
       - name: Archive generated evidence
@@ -180,4 +191,5 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_readout.json
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/sizing_candidate_qualification.json
