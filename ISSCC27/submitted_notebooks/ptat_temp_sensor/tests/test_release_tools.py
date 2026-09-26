@@ -11,6 +11,7 @@ import pdk_calibration_analysis
 import readout_budget
 import run_sky130
 import sizing_candidate_qualification
+import submission_preflight
 import mismatch_sizing_study
 
 
@@ -63,6 +64,11 @@ def test_behavioral_readout_budget_passes():
         r["worst_quantized_pwl_sampled_error_c"]
         <= r["quantized_sampled_grid_target_c"]
     )
+
+
+def test_statistical_release_contract_is_explicit():
+    ok, errors = submission_preflight.check_statistical_release_contract()
+    assert ok, errors
 
 
 def test_notebook_submission_structure_is_explicit():
