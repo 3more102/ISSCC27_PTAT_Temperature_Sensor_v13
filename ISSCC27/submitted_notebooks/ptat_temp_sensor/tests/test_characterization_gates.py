@@ -248,3 +248,47 @@ def test_calibration_candidate_status_guard_accepts_only_unpromoted_states():
 def test_sizing_validation_seed_ranges_must_be_disjoint():
     assert mismatch_sizing_sweep.seed_ranges_overlap(3001, 12, 3010, 100)
     assert not mismatch_sizing_sweep.seed_ranges_overlap(3001, 12, 9001, 100)
+
+
+def test_sizing_sweep_delegates_to_canonical_mismatch_runner(monkeypatch, tmp_path):
+    captured = {}
+
+    monkeypatch.setattr(
+        run_sky130,
+        "load_design",
+        lambda: {
+            "nominal_characterization_seed": {
+                "reference_current_a": 1.0e-7,
+            }
+        },
+    )
+
+    def fake_run_sample(seed, temps, out, model_lib, ngspice, **kwargs):
+        captured.update(
+            seed=seed,
+            temps=temps,
+            out=out,
+            model_lib=model_lib,
+            ngspice=ngspice,
+            kwargs=kwargs,
+        )
+        return tmp_path / "sample.csv"
+
+    monkeypatch.setattr(mismatch_mc, "run_sample", fake_run_sample)
+    model = tmp_path / "sky130.lib.spice"
+    result = mismatch_sizing_sweep.run_sample(
+        3001,
+        [-40.0, 125.0],
+        tmp_path,
+        model,
+        "ngspice",
+        10.0,
+        4.0,
+        2.0,
+    )
+
+    assert result == tmp_path / "sample.csv"
+    assert captured["seed"] == 3001
+    assert captured["kwargs"]["reference_current_a"] == pytest.approx(1.0e-6)
+    assert captured["kwargs"]["mirror_linear_scale"] == pytest.approx(4.0)
+    assert captured["kwargs"]["sensor_linear_scale"] == pytest.approx(2.0)
