@@ -47,6 +47,10 @@ def fixed_pwl_errors(
         g=(t[ib]-t[ia])/(v[ib]-v[ia]); b=t[ia]-g*v[ia]
         for j in range(ia,ib+1):
             est[j]=g*v[j]+b
+    if any(not math.isfinite(e) for e in est):
+        raise ValueError(
+            "calibration anchors must cover the full dense temperature grid"
+        )
     return [e-y for e,y in zip(est,t)]
 
 def summarize_errors(err: list[float]) -> dict:
