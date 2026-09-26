@@ -82,7 +82,15 @@ def run_sample(seed:int,temps:list[float],out:Path,model_lib:Path,ngspice:str)->
     rel=csv_path.relative_to(results_root).as_posix()
     net=netdir/f"sample_{seed:05d}.spice"
     net.write_text(render(seed,temps,rel,model_lib),encoding="utf-8")
-    p=subprocess.run([ngspice,"-b",str(net)],cwd=ROOT,text=True,capture_output=True,timeout=300)
+    ngspice_env,_=run_sky130.prepare_ngspice_environment(out)
+    p=subprocess.run(
+        [ngspice,"-b",str(net)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=300,
+        env=ngspice_env,
+    )
     (logdir/f"sample_{seed:05d}.log").write_text(
         p.stdout+"\n--- STDERR ---\n"+p.stderr,encoding="utf-8"
     )
@@ -131,6 +139,7 @@ def analyze(files:list[Path],temps:list[float])->dict:
                            "p50":percentile(errors,.50),"p95":percentile(errors,.95),
                            "p99":percentile(errors,.99),"worst":max(errors)},
         "dvgs_25c_std_v":pstdev(dv25) if len(dv25)>1 else 0.0,
+        "ngspice_compatibility_mode":"hsa",
         "per_sample":samples,
     }
 
