@@ -18,6 +18,7 @@ The maintained project is under:
 - Real SKY130 ngspice characterization: **retained CI run 221 evidence**
 - SKY130 corners: **TT / FF / SS**
 - Real PMOS-mirror characterization: **retained CI run 221 evidence**
+- Retained-PDK digital calibration post-processing: **CI-checked sampled-grid evidence**
 - Silicon measurement: not available
 - Statistical PDK mismatch Monte-Carlo: not claimed
 - Layout DRC/LVS: not claimed as PASS
@@ -42,6 +43,18 @@ python evidence_audit.py
 ```
 
 The audit recomputes the promoted SKY130 metrics directly from retained CSVs and verifies them against the manifest and design seed. GitHub Actions runs the same check on pull requests and pushes.
+
+## Retained-PDK calibration result
+
+Post-processing of the six retained run-221 datasets gives:
+
+- endpoint two-point calibration (−40/125 °C): **4.600 °C** worst absolute error at retained samples;
+- best exhaustive five-point PWL anchors: **−40, −20, 0, 50, 125 °C**;
+- five-point PWL: **0.472 °C** worst absolute error and **0.212 °C** worst RMS error across the retained sampled grid.
+
+This is digital post-processing of retained simulation CSVs only. It does not establish silicon performance, statistical mismatch performance, DRC/LVS status, or error bounds between unsampled temperatures.
+
+Run `python pdk_calibration_analysis.py --check` from the maintained project directory to verify the retained result.
 
 ## Evidence rule
 
