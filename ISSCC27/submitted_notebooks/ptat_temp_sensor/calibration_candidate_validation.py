@@ -241,10 +241,8 @@ def main() -> int:
         candidate_info = release["known_evidence"][
             "six_point_candidate_20260926"
         ]
-        if (
-            candidate_info.get("status")
-            != "DISCOVERY_ONLY_NOT_RELEASE_VALIDATED"
-        ):
+        candidate_status = str(candidate_info.get("status", ""))
+        if not candidate_status.endswith("NOT_RELEASE_VALIDATED"):
             raise ValueError(
                 "candidate must remain pre-declared and unpromoted "
                 "during validation"
