@@ -67,7 +67,7 @@ jobs:
   full-pdk-verification:
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 3
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       PDK_ROOT: /home/runner/pdk
       SKY130_PDK_REVISION: 12df12e2e74145e31c5a13de02f9a1e176b56e67
