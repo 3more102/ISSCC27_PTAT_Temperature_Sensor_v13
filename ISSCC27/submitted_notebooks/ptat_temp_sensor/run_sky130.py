@@ -185,8 +185,20 @@ def pdk_revision(model_lib: Path) -> str:
 
 def ngspice_version(ngspice: str) -> str:
     proc = subprocess.run([ngspice, "-v"], text=True, capture_output=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ngspice version query failed with exit code {proc.returncode}"
+        )
     lines = (proc.stdout + "\n" + proc.stderr).splitlines()
-    return lines[0] if lines else "unknown"
+    for line in lines:
+        match = re.search(
+            r"\\bngspice(?:\\s+release)?[-\\s]+(\\d+(?:\\.\\d+)*)\\b",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return f"ngspice {match.group(1)}"
+    raise RuntimeError("unable to parse ngspice version from 'ngspice -v'")
 
 
 def render(
