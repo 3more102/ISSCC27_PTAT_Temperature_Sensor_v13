@@ -93,39 +93,19 @@ jobs:
         run: |
           python run_sky130.py --mode both --corners tt ff ss --temps=-40:125:5
           python dense_characterization.py
-      - name: Retain baseline local-mismatch result
+      - name: Local mismatch Monte Carlo evidence
+        run: >-
+          python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5
+          --allow-fail
+      - name: Independent six-point calibration validation
+        run: >-
+          python mismatch_mc.py --samples 100 --seed-start 7001 --jobs 4
+          --temps=-40:125:5 --anchors=-40,-25,-5,25,65,125
+          --output-dir results/mismatch_candidate_validation --allow-fail
+      - name: Mismatch sizing exploration
         run: |
-          python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5 --allow-fail
-      - name: Discovery geometry screen
-        run: |
-          python mismatch_geometry_screen.py \
-            --samples-per-candidate 20 \
-            --seed-start 5001 \
-            --jobs 4 \
-            --temps=-40:125:5 \
-            --anchors=-40,-25,-5,25,65,125
-      - name: Independent 100-seed validation of selected geometry
-        run: |
-          SCALE=$(python - <<'PY'
-          import json
-          from pathlib import Path
-          data = json.loads(Path('results/mismatch_geometry_screen/summary.json').read_text())
-          scale = data.get('selected_scale')
-          if scale is None:
-              raise SystemExit('no geometry candidate selected')
-          print(scale)
-          PY
-          )
-          echo "Validating W/L-preserving linear scale ${SCALE} on independent seeds 7001-7100"
-          python mismatch_mc.py \
-            --samples 100 \
-            --seed-start 7001 \
-            --jobs 4 \
-            --temps=-40:125:5 \
-            --anchors=-40,-25,-5,25,65,125 \
-            --sensor-linear-scale "${SCALE}" \
-            --mirror-linear-scale "${SCALE}" \
-            --output-dir results/mismatch_independent_validation
+          python mismatch_sizing_sweep.py --samples-per-candidate 12 \
+            --jobs 4 --temps=-40:125:5
       - name: Archive generated evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -135,5 +115,5 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk_analysis.json
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
-            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_geometry_screen
-            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_independent_validation
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_candidate_validation
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
