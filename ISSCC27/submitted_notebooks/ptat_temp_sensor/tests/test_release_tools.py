@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 
 import pdk_calibration_analysis
 import readout_budget
+import run_sky130
 
 
 def test_retained_five_point_target_is_met():
@@ -43,3 +44,10 @@ def test_notebook_submission_structure_is_explicit():
 
     ok, errors = submission_preflight.check_notebook()
     assert ok, errors
+
+
+def test_sky130_runner_uses_isolated_hsa_compatibility_mode(tmp_path):
+    env, spiceinit = run_sky130.prepare_ngspice_environment(tmp_path)
+    assert env["HOME"] == str((tmp_path / "ngspice_home").resolve())
+    assert spiceinit == (tmp_path / "ngspice_home" / ".spiceinit").resolve()
+    assert spiceinit.read_text(encoding="utf-8") == "set ngbehavior=hsa\n"
