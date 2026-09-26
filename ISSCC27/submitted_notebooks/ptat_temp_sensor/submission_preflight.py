@@ -67,6 +67,22 @@ def check_notebook() -> tuple[bool, list[str]]:
         if marker not in markdown:
             errors.append(f"missing {label}: {marker!r}")
 
+    all_source = "\n".join(
+        "".join(c.get("source", []))
+        if isinstance(c.get("source"), list)
+        else str(c.get("source", ""))
+        for c in cells
+    )
+    executable_markers = {
+        "Colab supporting-files bootstrap": (
+            "sscs-ose-code-a-chip.github.io.git"
+        ),
+        "Colab bootstrap subprocess": "subprocess.run",
+    }
+    for label, marker in executable_markers.items():
+        if marker not in all_source:
+            errors.append(f"missing {label}: {marker!r}")
+
     return not errors, errors
 
 
