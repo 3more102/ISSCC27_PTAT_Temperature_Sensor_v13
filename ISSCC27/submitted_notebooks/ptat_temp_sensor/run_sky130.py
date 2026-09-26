@@ -119,6 +119,14 @@ def characterization_seed(
     return seed
 
 
+def math_isfinite_value(value: float) -> bool:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return -float("inf") < number < float("inf")
+
+
 def math_isfinite_positive(value: float) -> bool:
     try:
         number = float(value)
@@ -244,6 +252,19 @@ def validate_csv(path: Path, temps: list[float], mode: str) -> None:
         required |= {"branch_small_a", "branch_large_a"}
     if not required.issubset(rows[0]):
         raise RuntimeError(f"{path}: missing expected columns")
+    try:
+        numeric_rows = [
+            {key: float(row[key]) for key in required}
+            for row in rows
+        ]
+    except (TypeError, ValueError, KeyError) as exc:
+        raise RuntimeError(f"{path}: non-numeric simulation data") from exc
+    if not all(
+        math_isfinite_value(value)
+        for row in numeric_rows
+        for value in row.values()
+    ):
+        raise RuntimeError(f"{path}: non-finite simulation data")
 
 
 def run_one(
