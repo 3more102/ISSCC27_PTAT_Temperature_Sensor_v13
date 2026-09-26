@@ -1,0 +1,35 @@
+name: Submission Quality
+
+on:
+  push:
+    branches:
+      - main
+      - "work/**"
+  pull_request:
+
+jobs:
+  submission-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify behavioral readout budget
+        run: python readout_budget.py --check
+      - name: Retained evidence integrity
+        run: python evidence_audit.py
+      - name: Retained calibration integrity
+        run: python pdk_calibration_analysis.py --check
+      - name: Submission preflight
+        run: python submission_preflight.py
+      - name: Execute notebook
+        run: jupyter nbconvert --to notebook --execute PTAT_Temperature_Sensor_Code_a_Chip.ipynb --output /tmp/PTAT_Temperature_Sensor_Code_a_Chip.executed.ipynb --ExecutePreprocessor.timeout=120
+      - name: Unit tests
+        run: pytest -q
