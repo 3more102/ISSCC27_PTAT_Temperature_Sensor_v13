@@ -97,8 +97,11 @@ def analyze(
     )
 
     mismatch_pass = validation.get("status") == "PASS"
+    validation_headroom_pass = validation.get("headroom_pass") is True
     dense_pass = dense.get("status") == "PASS"
-    qualified = bool(mismatch_pass and dense_pass)
+    qualified = bool(
+        mismatch_pass and validation_headroom_pass and dense_pass
+    )
 
     return {
         "status": (
@@ -125,6 +128,11 @@ def analyze(
             "error_yield_percent": float(validation["error_yield_percent"]),
             "branch_yield_percent": float(validation["branch_yield_percent"]),
             "headroom_pass": bool(validation["headroom_pass"]),
+        },
+        "qualification_components": {
+            "independent_mismatch_pass": mismatch_pass,
+            "independent_headroom_pass": validation_headroom_pass,
+            "dense_tt_ff_ss_pass": dense_pass,
         },
         "dense_tt_ff_ss": {
             "status": dense.get("status"),
