@@ -152,6 +152,11 @@ def main() -> int:
     sensor_scales = (1.0, 2.0)
     try:
         model = run_sky130.discover_model_lib()
+        revision = run_sky130.pdk_revision(model)
+        if revision == "unknown":
+            raise RuntimeError(
+                "exact SKY130 revision unavailable; set SKY130_PDK_REVISION"
+            )
         candidates = []
         for iref_scale in iref_scales:
             for mirror_scale in mirror_scales:
@@ -291,6 +296,16 @@ def main() -> int:
         "recommended_for_independent_validation": best,
         "independent_validation": validation,
         "headroom_qualified_candidate_found": best is not None,
+        "provenance": {
+            "ngspice": run_sky130.ngspice_version(ngspice),
+            "ngspice_compatibility_mode": "hsa",
+            "pdk_revision": revision,
+            "model_library": str(model),
+            "model_sha256": run_sky130.sha256_file(model),
+            "design_requirements_sha256": run_sky130.sha256_file(
+                ROOT / "design_requirements.json"
+            ),
+        },
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "summary.json").write_text(
