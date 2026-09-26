@@ -236,6 +236,7 @@ def main() -> int:
     ranked = sorted(
         candidates,
         key=lambda x: (
+            not x["headroom_pass"],
             -min(
                 x["branch_yield_percent"],
                 x["error_yield_percent"],
@@ -257,8 +258,9 @@ def main() -> int:
         "parallel_jobs": args.jobs,
         "temperature_c": temps,
         "selection_policy": (
-            "rank the weaker of branch/error yield first, then error yield, "
-            "branch yield, p95 error, p95 branch mismatch, and worst power"
+            "prefer headroom-pass candidates; then rank the weaker of "
+            "branch/error yield, error yield, branch yield, p95 error, "
+            "p95 branch mismatch, and worst power"
         ),
         "candidates": ranked,
         "recommended_for_independent_validation": ranked[0],
