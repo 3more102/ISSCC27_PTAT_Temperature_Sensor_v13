@@ -221,6 +221,9 @@ def test_dense_characterization_accepts_explicit_anchor_schedule(tmp_path):
             )
     result = dense_characterization.analyze(tmp_path, custom_anchors)
     assert result["anchors_c"] == custom_anchors
+    assert result["calibration_anchor_count"] == len(custom_anchors)
+    assert result["uses_release_anchors"] is False
+    assert result["worst_pwl_max_abs_error_c"] < 1e-9
     assert result["worst_five_point_pwl_max_abs_error_c"] < 1e-9
     assert result["status"] == "PASS"
 
@@ -292,3 +295,12 @@ def test_sizing_sweep_delegates_to_canonical_mismatch_runner(monkeypatch, tmp_pa
     assert captured["kwargs"]["reference_current_a"] == pytest.approx(1.0e-6)
     assert captured["kwargs"]["mirror_linear_scale"] == pytest.approx(4.0)
     assert captured["kwargs"]["sensor_linear_scale"] == pytest.approx(2.0)
+
+
+def test_dense_characterization_rejects_zero_pwl_voltage_span():
+    with pytest.raises(ValueError, match="zero PWL voltage span"):
+        dense_characterization.fixed_pwl_errors(
+            [-40.0, 0.0, 40.0],
+            [0.05, 0.05, 0.06],
+            [-40.0, 0.0, 40.0],
+        )
