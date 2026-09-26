@@ -59,7 +59,18 @@ def evidence():
             "vdd_v": 1.8,
         },
     }
-    return sweep, dense, metadata, 1.0e-7
+    readout = {
+        "status": "PASS",
+        "anchors_c": [-40, -20, 0, 50, 125],
+        "bits": 12,
+        "vref_v": 1.8,
+        "analog_gain": 10.0,
+        "worst_quantization_rms_c": 0.05,
+        "worst_full_scale_utilization": 0.8,
+        "worst_quantized_pwl_sampled_error_c": 0.45,
+        "provenance": provenance.copy(),
+    }
+    return sweep, dense, metadata, readout, 1.0e-7
 
 
 @pytest.mark.parametrize(
@@ -145,4 +156,35 @@ def test_legacy_dense_metric_remains_accepted(evidence):
 def test_missing_seed_metadata_cannot_claim_independence(evidence):
     del evidence[0]["samples_per_candidate"]
     with pytest.raises((qualification.QualificationError, KeyError)):
+        qualification.analyze(*evidence)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("status", "FAIL"),
+        ("bits", 11),
+        ("vref_v", 1.7),
+        ("analog_gain", 9.0),
+        ("worst_quantization_rms_c", 0.11),
+        ("worst_full_scale_utilization", 0.91),
+        ("worst_quantized_pwl_sampled_error_c", 0.51),
+        ("anchors_c", [-40, -25, -5, 25, 65, 125]),
+    ],
+)
+def test_readout_pass_label_cannot_override_release_contract(
+    evidence, field, value
+):
+    evidence[3][field] = value
+    result = qualification.analyze(*evidence)
+    assert result["qualification_components"]["readout_pass"] is False
+    assert result["qualified_for_release_review"] is False
+
+
+def test_readout_provenance_mismatch_fails_closed(evidence):
+    evidence[3]["provenance"]["pdk_revision"] = "different-pdk"
+    with pytest.raises(
+        qualification.QualificationError,
+        match="readout pdk_revision provenance mismatch",
+    ):
         qualification.analyze(*evidence)
