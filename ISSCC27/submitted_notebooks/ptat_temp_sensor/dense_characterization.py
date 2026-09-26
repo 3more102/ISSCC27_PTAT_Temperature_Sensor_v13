@@ -53,6 +53,26 @@ def branch_mismatch_percent(branch_small_a: float, branch_large_a: float) -> flo
         raise ValueError("branch currents must have a positive mean magnitude")
     return abs(small - large) / denom * 100.0
 
+def load_provenance(input_dir: Path) -> dict:
+    path = input_dir / "run_metadata.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"{path}: missing simulation provenance")
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    required = (
+        "ngspice",
+        "ngspice_compatibility_mode",
+        "pdk_revision",
+        "model_library",
+        "model_sha256",
+        "design_requirements_sha256",
+    )
+    missing = [key for key in required if not meta.get(key)]
+    if missing:
+        raise ValueError(f"{path}: incomplete provenance fields: {missing}")
+    if meta["pdk_revision"] == "unknown":
+        raise ValueError(f"{path}: exact PDK revision is unknown")
+    return {key: meta[key] for key in required}
+
 def analyze(input_dir: Path) -> dict:
     per={}
     for mode in ("ideal","mirror"):
@@ -111,6 +131,7 @@ def main()->int:
     args=ap.parse_args()
     try:
         result=analyze(args.input_dir)
+        result["provenance"]=load_provenance(args.input_dir)
     except Exception as exc:
         print(f"DENSE CHARACTERIZATION: FAIL: {exc}")
         return 1

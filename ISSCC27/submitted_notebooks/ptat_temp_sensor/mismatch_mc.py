@@ -7,7 +7,7 @@ deterministic local-mismatch realization that remains fixed during its
 temperature sweep.
 """
 from __future__ import annotations
-import argparse, csv, json, math, re, shutil, subprocess, sys
+import argparse, csv, json, math, re, shutil, subprocess, sys\nfrom concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from statistics import mean, pstdev
 
@@ -91,7 +91,8 @@ def run_sample(seed:int,temps:list[float],out:Path,model_lib:Path,ngspice:str)->
     rel=csv_path.relative_to(results_root).as_posix()
     net=netdir/f"sample_{seed:05d}.spice"
     net.write_text(render(seed,temps,rel,model_lib),encoding="utf-8")
-    ngspice_env,_=run_sky130.prepare_ngspice_environment(out)
+    runtime_dir=out/"runtime"/f"sample_{seed:05d}"
+    ngspice_env,_=run_sky130.prepare_ngspice_environment(runtime_dir)
     p=subprocess.run(
         [ngspice,"-b",str(net)],
         cwd=ROOT,
@@ -162,21 +163,54 @@ def main()->int:
     ap=argparse.ArgumentParser()
     ap.add_argument("--samples",type=int,default=100)
     ap.add_argument("--seed-start",type=int,default=1001)
+    ap.add_argument("--jobs",type=int,default=1)
     ap.add_argument("--temps",default="-40:125:5")
     ap.add_argument("--output-dir",type=Path,default=ROOT/"results"/"mismatch_mc")
     args=ap.parse_args()
     if args.samples<2:
         print("MISMATCH MC: FAIL: at least 2 samples required"); return 2
+    if args.jobs<1:
+        print("MISMATCH MC: FAIL: --jobs must be at least 1"); return 2
     temps=run_sky130.parse_temps(args.temps)
     ngspice=shutil.which("ngspice")
     if not ngspice:
         print("MISMATCH MC: FAIL: ngspice not found"); return 2
     try:
         model=run_sky130.discover_model_lib()
+        revision=run_sky130.pdk_revision(model)
+        if revision=="unknown":
+            raise RuntimeError(
+                "exact SKY130 revision unavailable; set SKY130_PDK_REVISION"
+            )
         args.output_dir.mkdir(parents=True,exist_ok=True)
-        files=[run_sample(args.seed_start+i,temps,args.output_dir,model,ngspice)
-               for i in range(args.samples)]
+        seeds=[args.seed_start+i for i in range(args.samples)]
+        if args.jobs==1:
+            files=[
+                run_sample(seed,temps,args.output_dir,model,ngspice)
+                for seed in seeds
+            ]
+        else:
+            with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+                futures=[
+                    pool.submit(
+                        run_sample,seed,temps,args.output_dir,model,ngspice
+                    )
+                    for seed in seeds
+                ]
+                files=[future.result() for future in as_completed(futures)]
+            files.sort()
         result=analyze(files,temps)
+        result["parallel_jobs"]=args.jobs
+        result["provenance"]={
+            "ngspice":run_sky130.ngspice_version(ngspice),
+            "ngspice_compatibility_mode":"hsa",
+            "pdk_revision":revision,
+            "model_library":str(model),
+            "model_sha256":run_sky130.sha256_file(model),
+            "design_requirements_sha256":run_sky130.sha256_file(
+                ROOT/"design_requirements.json"
+            ),
+        }
     except Exception as exc:
         print(f"MISMATCH MC: FAIL: {exc}",file=sys.stderr); return 1
     (args.output_dir/"summary.json").write_text(

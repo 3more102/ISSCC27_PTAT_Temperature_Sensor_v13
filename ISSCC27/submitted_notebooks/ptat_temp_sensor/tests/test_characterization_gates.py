@@ -85,3 +85,45 @@ def test_mismatch_mc_requires_branch_mismatch_yield(monkeypatch, tmp_path):
     assert result["yield_percent_error_le_target"] == pytest.approx(100.0)
     assert result["yield_percent_branch_mismatch_le_target"] == pytest.approx(50.0)
     assert result["status"] == "FAIL"
+
+
+def test_pdk_revision_prefers_explicit_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("SKY130_PDK_REVISION", "pinned-revision")
+    model = tmp_path / "sky130.lib.spice"
+    assert run_sky130.pdk_revision(model) == "pinned-revision"
+
+
+def test_pdk_revision_can_be_inferred_from_volare_path(monkeypatch, tmp_path):
+    monkeypatch.delenv("SKY130_PDK_REVISION", raising=False)
+    model = (
+        tmp_path
+        / "sky130"
+        / "versions"
+        / "abc123"
+        / "sky130A"
+        / "libs.tech"
+        / "ngspice"
+        / "sky130.lib.spice"
+    )
+    assert run_sky130.pdk_revision(model) == "abc123"
+
+
+def test_dense_provenance_fails_closed_when_metadata_is_missing(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        dense_characterization.load_provenance(tmp_path)
+
+
+def test_dense_provenance_requires_exact_pdk_revision(tmp_path):
+    metadata = {
+        "ngspice": "ngspice-46",
+        "ngspice_compatibility_mode": "hsa",
+        "pdk_revision": "unknown",
+        "model_library": "/pdk/sky130.lib.spice",
+        "model_sha256": "a" * 64,
+        "design_requirements_sha256": "b" * 64,
+    }
+    (tmp_path / "run_metadata.json").write_text(
+        __import__("json").dumps(metadata), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="exact PDK revision is unknown"):
+        dense_characterization.load_provenance(tmp_path)

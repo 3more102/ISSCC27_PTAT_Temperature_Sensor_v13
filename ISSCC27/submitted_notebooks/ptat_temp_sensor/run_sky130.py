@@ -5,7 +5,7 @@ This runner creates NEW simulation evidence. It never overwrites retained run-22
 evidence unless the caller explicitly chooses the same output path.
 """
 from __future__ import annotations
-import argparse, csv, json, os, re, shutil, subprocess, sys
+import argparse, csv, hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -73,6 +73,29 @@ def prepare_ngspice_environment(output_dir: Path) -> tuple[dict[str, str], Path]
 
 def load_design() -> dict:
     return json.loads((ROOT/"design_requirements.json").read_text(encoding="utf-8"))
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def pdk_revision(model_lib: Path) -> str:
+    explicit = os.environ.get("SKY130_PDK_REVISION", "").strip()
+    if explicit:
+        return explicit
+    parts = model_lib.resolve().parts
+    if "versions" in parts:
+        index = parts.index("versions")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    return "unknown"
+
+def ngspice_version(ngspice: str) -> str:
+    proc = subprocess.run([ngspice, "-v"], text=True, capture_output=True)
+    lines = (proc.stdout + "\n" + proc.stderr).splitlines()
+    return lines[0] if lines else "unknown"
 
 def render(mode: str, corner: str, temps: list[float], output_rel: str, model_lib: Path) -> str:
     design = load_design()
@@ -174,12 +197,15 @@ def main() -> int:
     except Exception as exc:
         print(f"SKY130 RUN: FAIL: {exc}", file=sys.stderr)
         return 1
-    vp = subprocess.run([ngspice, "-v"], text=True, capture_output=True)
-    lines = (vp.stdout + "\n" + vp.stderr).splitlines()
     meta = {
         "status": "PASS",
         "model_library": str(model_lib),
-        "ngspice": lines[0] if lines else "unknown",
+        "model_sha256": sha256_file(model_lib),
+        "pdk_revision": pdk_revision(model_lib),
+        "design_requirements_sha256": sha256_file(
+            ROOT / "design_requirements.json"
+        ),
+        "ngspice": ngspice_version(ngspice),
         "ngspice_compatibility_mode": "hsa",
         "temperature_c": temps,
         "modes": list(modes),
