@@ -59,7 +59,7 @@ jobs:
       - name: Match upstream Colab badge check
         run: |
           grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb
-          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb | grep 'sscs-ose'
+          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb | (! grep -v 'sscs-ose')
       - name: Match upstream notebook execution
         run: pytest --nbmake PTAT_Temperature_Sensor_Code_a_Chip.ipynb
 
