@@ -11,6 +11,8 @@ DEFAULT_ANCHORS = [
     float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]
 ]
 MIRROR_MISMATCH_TARGET = float(DESIGN["mirror_branch_mismatch_percent_max"])
+HEADROOM_TARGET = float(DESIGN["headroom_guardband_v_min"])
+NOMINAL_VDD = float(DESIGN["nominal_characterization_seed"]["vdd_v"])
 
 def read_xy(path: Path) -> tuple[list[float], list[float], list[dict[str,str]]]:
     with path.open(newline="", encoding="utf-8") as f:
@@ -114,8 +116,12 @@ def load_provenance(input_dir: Path) -> dict:
 def analyze(
     input_dir: Path,
     anchors: list[float] | None = None,
+    vdd_v: float | None = None,
 ) -> dict:
     use_anchors = DEFAULT_ANCHORS if anchors is None else anchors
+    use_vdd = NOMINAL_VDD if vdd_v is None else float(vdd_v)
+    if not math.isfinite(use_vdd) or use_vdd <= 0.0:
+        raise ValueError("VDD must be a finite positive value")
     per={}
     for mode in ("ideal","mirror"):
         for corner in ("tt","ff","ss"):
@@ -132,6 +138,11 @@ def analyze(
                     fixed_pwl_errors(t, v, use_anchors)
                 ),
                 "max_power_uw":max(float(r["power_w"]) for r in rows)*1e6,
+                "min_sensor_headroom_v":min(
+                    use_vdd
+                    - max(float(r["vgs_small_v"]), float(r["vgs_large_v"]))
+                    for r in rows
+                ),
             }
             if mode=="mirror":
                 mismatch=max(
@@ -151,10 +162,12 @@ def analyze(
         x["max_branch_mismatch_percent"]
         for key,x in per.items() if key.startswith("mirror_")
     )
+    worst_headroom=min(x["min_sensor_headroom_v"] for x in per.values())
     return {
         "status":"PASS" if (
             worst<=target and step<=max_step_target
             and worst_mirror_mismatch<=MIRROR_MISMATCH_TARGET
+            and worst_headroom>=HEADROOM_TARGET
         ) else "FAIL",
         "evidence_boundary":"New transistor-level SKY130 dense-grid evidence; not silicon and not layout-extracted.",
         "calibration":(
@@ -170,6 +183,9 @@ def analyze(
         "target_max_abs_error_c":target,
         "worst_mirror_branch_mismatch_percent":worst_mirror_mismatch,
         "mirror_branch_mismatch_target_percent":MIRROR_MISMATCH_TARGET,
+        "min_sensor_headroom_v":worst_headroom,
+        "sensor_headroom_target_v":HEADROOM_TARGET,
+        "vdd_v":use_vdd,
         "per_dataset":per,
     }
 
@@ -197,8 +213,16 @@ def main()->int:
             raise ValueError(
                 "calibration anchors must be unique and strictly increasing"
             )
-        result=analyze(args.input_dir, anchors)
-        result["provenance"]=load_provenance(args.input_dir)
+        provenance=load_provenance(args.input_dir)
+        metadata=json.loads(
+            (args.input_dir/"run_metadata.json").read_text(encoding="utf-8")
+        )
+        operating=metadata.get("operating_point", {})
+        if "vdd_v" not in operating:
+            raise ValueError("run metadata missing operating_point.vdd_v")
+        result=analyze(args.input_dir, anchors, float(operating["vdd_v"]))
+        result["provenance"]=provenance
+        result["operating_point"]=operating
     except Exception as exc:
         print(f"DENSE CHARACTERIZATION: FAIL: {exc}")
         return 1
@@ -213,6 +237,7 @@ def main()->int:
     print(f"DENSE CHARACTERIZATION: {result['status']}")
     print("worst five-point PWL error:",result["worst_five_point_pwl_max_abs_error_c"])
     print("worst mirror branch mismatch (%):",result["worst_mirror_branch_mismatch_percent"])
+    print("minimum sensor headroom (V):",result["min_sensor_headroom_v"])
     return 0 if result["status"]=="PASS" or args.allow_fail else 1
 
 if __name__=="__main__":
