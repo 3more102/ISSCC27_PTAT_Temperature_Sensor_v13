@@ -255,9 +255,12 @@ def main() -> int:
             x["worst_max_power_uw"],
         ),
     )
-    best = ranked[0]
+    best = next(
+        (candidate for candidate in ranked if candidate["headroom_pass"]),
+        None,
+    )
     validation = None
-    if args.validation_samples >= 2:
+    if best is not None and args.validation_samples >= 2:
         validation_out = args.output_dir / "independent_validation"
         validation_seeds = [
             args.validation_seed_start + idx
@@ -324,6 +327,7 @@ def main() -> int:
         "candidates": ranked,
         "recommended_for_independent_validation": best,
         "independent_validation": validation,
+        "headroom_qualified_candidate_found": best is not None,
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "summary.json").write_text(
@@ -331,7 +335,11 @@ def main() -> int:
         encoding="utf-8",
     )
     print("MISMATCH SIZING SWEEP: COMPLETE")
-    print("best candidate:", best["candidate"])
+    if best is None:
+        print("no candidate passed the sensor-headroom gate")
+        return 0
+
+    print("best headroom-qualified candidate:", best["candidate"])
     print("headroom pass:", best["headroom_pass"])
     print("minimum sensor headroom (V):", best["min_sensor_headroom_v"])
     print("branch yield (%):", best["branch_yield_percent"])
