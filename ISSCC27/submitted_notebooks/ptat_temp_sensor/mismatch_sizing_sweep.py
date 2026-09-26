@@ -143,13 +143,14 @@ def main() -> int:
         print("MISMATCH SIZING SWEEP: FAIL: ngspice not found")
         return 2
 
-    # Keep the screen compact but reach the geometry range implied by the
-    # baseline branch-mismatch distribution.  The current 1x mirror has a
-    # retained p95 max branch mismatch above 20%, so stopping at 4x linear
-    # scale is unlikely to test whether the 1% internal target is reachable.
+    # Extend the discovery range after independent validation showed that
+    # i1_m16_s1 still misses both 95% mismatch-yield targets.  Keep the
+    # previously explored points for continuity, but add larger mirror and
+    # sensor geometries so the next selection is evidence-driven rather than
+    # an untested extrapolation from the 16x candidate.
     iref_scales = (1.0, 10.0)
-    mirror_scales = (1.0, 4.0, 8.0, 16.0, 24.0)
-    sensor_scales = (1.0, 2.0)
+    mirror_scales = (1.0, 4.0, 8.0, 16.0, 24.0, 32.0, 48.0)
+    sensor_scales = (1.0, 2.0, 4.0)
     try:
         model = run_sky130.discover_model_lib()
         revision = run_sky130.pdk_revision(model)
