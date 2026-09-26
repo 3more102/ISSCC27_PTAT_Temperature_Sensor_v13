@@ -61,6 +61,7 @@ def check_notebook() -> tuple[bool, list[str]]:
         "pinned SKY130/open_pdks revision": PINNED_PDK,
         "reproducibility section": "## Reproducibility",
         "limitations section": "## Limitations",
+        "innovation section": "## Innovation and contribution",
     }
     for label, marker in required_markers.items():
         if marker not in markdown:
