@@ -96,6 +96,11 @@ jobs:
           python dense_characterization.py
       - name: Local mismatch Monte Carlo
         run: python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5
+      - name: Mismatch sizing exploration
+        if: always()
+        run: |
+          python mismatch_sizing_sweep.py --samples-per-candidate 12 \
+            --jobs 4 --temps=-40:125:5
       - name: Archive generated evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -105,3 +110,4 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk_analysis.json
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
