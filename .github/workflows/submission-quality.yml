@@ -97,7 +97,6 @@ jobs:
       - name: Local mismatch Monte Carlo
         run: python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5 --allow-fail
       - name: Mismatch sizing exploration
-        if: always()
         run: |
           python mismatch_sizing_sweep.py --samples-per-candidate 12 \
             --jobs 4 --temps=-40:125:5
