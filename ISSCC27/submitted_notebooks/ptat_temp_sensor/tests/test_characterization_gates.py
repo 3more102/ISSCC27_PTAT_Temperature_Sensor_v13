@@ -10,7 +10,6 @@ if str(ROOT) not in sys.path:
 
 import dense_characterization
 import mismatch_mc
-import mismatch_geometry_screen
 import run_sky130
 
 
@@ -140,18 +139,6 @@ def test_anchor_parser_accepts_candidate_schedule():
 def test_anchor_parser_rejects_unsorted_values():
     with pytest.raises(ValueError, match="strictly increasing"):
         mismatch_mc.parse_anchor_list("-40,25,0,125")
-
-
-def test_geometry_scale_parser_requires_increasing_positive_values():
-    assert mismatch_geometry_screen.parse_scales("8,16,24") == [
-        8.0,
-        16.0,
-        24.0,
-    ]
-    with pytest.raises(ValueError, match="positive"):
-        mismatch_geometry_screen.parse_scales("0,8")
-    with pytest.raises(ValueError, match="increasing"):
-        mismatch_geometry_screen.parse_scales("16,8")
 
 
 def test_mismatch_render_scales_w_and_l_together(tmp_path):
