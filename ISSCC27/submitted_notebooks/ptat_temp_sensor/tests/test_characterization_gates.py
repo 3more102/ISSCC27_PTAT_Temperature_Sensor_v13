@@ -339,3 +339,22 @@ def test_dense_and_runner_reject_inconsistent_dvgs(tmp_path):
     with pytest.raises(RuntimeError, match="inconsistent"):
         run_sky130.validate_csv(path, DENSE_TEMPS, "mirror")
 
+
+
+def test_dense_characterization_includes_headroom_in_status(tmp_path):
+    for mode in ("ideal", "mirror"):
+        for corner in ("tt", "ff", "ss"):
+            _write_rows(
+                tmp_path / f"ptat_{mode}_{corner}.csv",
+                DENSE_TEMPS,
+                branch_ratio=1.0,
+            )
+    result = dense_characterization.analyze(
+        tmp_path, ANCHOR_TEMPS, vdd_v=0.55
+    )
+    assert result["worst_five_point_pwl_max_abs_error_c"] < 1e-9
+    assert (
+        result["min_sensor_headroom_v"]
+        < result["sensor_headroom_target_v"]
+    )
+    assert result["status"] == "FAIL"
