@@ -281,6 +281,12 @@ def validate_csv(path: Path, temps: list[float], mode: str) -> None:
         for value in row.values()
     ):
         raise RuntimeError(f"{path}: non-finite simulation data")
+    for row in numeric_rows:
+        derived_dvgs = row["vgs_small_v"] - row["vgs_large_v"]
+        if abs(row["dvgs_v"] - derived_dvgs) > 2.0e-6:
+            raise RuntimeError(
+                f"{path}: dvgs_v is inconsistent with the recorded VGS values"
+            )
 
 
 def run_one(
