@@ -358,3 +358,36 @@ def test_dense_characterization_includes_headroom_in_status(tmp_path):
         < result["sensor_headroom_target_v"]
     )
     assert result["status"] == "FAIL"
+
+
+def test_ngspice_version_ignores_banner_line(monkeypatch):
+    class Proc:
+        returncode = 0
+        stdout = (
+            "******\n"
+            "** ngspice-46 : Circuit level simulation program\n"
+            "******\n"
+        )
+        stderr = ""
+
+    monkeypatch.setattr(
+        run_sky130.subprocess,
+        "run",
+        lambda *args, **kwargs: Proc(),
+    )
+    assert run_sky130.ngspice_version("ngspice") == "ngspice 46"
+
+
+def test_ngspice_version_fails_closed_when_unparseable(monkeypatch):
+    class Proc:
+        returncode = 0
+        stdout = "******\nversion unavailable\n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        run_sky130.subprocess,
+        "run",
+        lambda *args, **kwargs: Proc(),
+    )
+    with pytest.raises(RuntimeError, match="unable to parse ngspice version"):
+        run_sky130.ngspice_version("ngspice")
