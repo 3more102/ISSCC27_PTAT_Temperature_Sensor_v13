@@ -13,7 +13,7 @@ Verified on 2026-09-26.
 - [x] Project is openly licensed (Apache-2.0).
 - [x] Jupyter notebook exists in `ISSCC27/submitted_notebooks/ptat_temp_sensor/`.
 - [x] Notebook explains idea, design decisions, methodology, results, limitations, and reproducibility.
-- [x] Notebook identifies the GitHub submission contact.
+- [x] Notebook identifies the GitHub submission contact.\n- [x] Notebook names the team member/submission representative at the top, per upstream guidance.
 - [x] Notebook records the retained ngspice and SKY130/open_pdks versions.
 - [x] Notebook includes explicit references.
 - [x] Notebook cells have stable unique IDs and execute in CI without nbformat ID warnings.

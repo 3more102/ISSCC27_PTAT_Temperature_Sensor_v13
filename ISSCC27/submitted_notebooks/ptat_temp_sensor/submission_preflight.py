@@ -52,7 +52,7 @@ def check_notebook() -> tuple[bool, list[str]]:
         if c.get("cell_type") == "markdown"
     )
     required_markers = {
-        "submission contact": "Submission contact",
+        "submission contact": "Submission contact",\n        "team member": "Team member",
         "references": "## References",
         "retained ngspice version": "ngspice 46",
         "pinned SKY130/open_pdks revision": PINNED_PDK,
