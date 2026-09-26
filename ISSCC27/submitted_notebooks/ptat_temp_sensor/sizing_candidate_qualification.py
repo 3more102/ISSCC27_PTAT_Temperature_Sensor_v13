@@ -13,6 +13,8 @@ import math
 import sys
 from pathlib import Path
 
+import mismatch_mc
+
 ROOT = Path(__file__).resolve().parent
 
 PROVENANCE_KEYS = (
@@ -120,6 +122,34 @@ def positive_integer(label: str, value: object) -> int:
     return int(result)
 
 
+def successes_from_yield(
+    label: str,
+    yield_percent: float,
+    samples: int,
+    explicit_count: object | None = None,
+) -> int:
+    """Recover an integer pass count and reject inconsistent evidence."""
+    raw = float(yield_percent) * samples / 100.0
+    rounded = round(raw)
+    if not math.isclose(raw, rounded, rel_tol=0.0, abs_tol=1e-9):
+        raise QualificationError(
+            f"{label}: yield is not consistent with an integer pass count"
+        )
+    successes = int(rounded)
+    if explicit_count is not None:
+        count = number(
+            f"{label} explicit pass count",
+            explicit_count,
+            minimum=0.0,
+            maximum=float(samples),
+        )
+        if not count.is_integer() or int(count) != successes:
+            raise QualificationError(
+                f"{label}: explicit pass count disagrees with yield"
+            )
+    return successes
+
+
 def analyze(
     sweep: dict,
     dense: dict | None,
@@ -203,6 +233,40 @@ def analyze(
     branch_yield = number(
         "branch yield", validation["branch_yield_percent"], maximum=100.0
     )
+    error_successes = successes_from_yield(
+        "error yield",
+        error_yield,
+        samples,
+        validation.get("error_pass_count"),
+    )
+    branch_successes = successes_from_yield(
+        "branch yield",
+        branch_yield,
+        samples,
+        validation.get("branch_pass_count"),
+    )
+    confidence_level = number(
+        "mismatch confidence level",
+        targets["mismatch_confidence_level_percent"],
+        minimum=0.0,
+        maximum=100.0,
+    )
+    if not math.isclose(
+        confidence_level, 95.0, rel_tol=0.0, abs_tol=1e-12
+    ):
+        raise QualificationError(
+            "only the configured 95% Wilson confidence gate is supported"
+        )
+    error_wilson = mismatch_mc.wilson_interval_percent(
+        error_successes, samples
+    )
+    branch_wilson = mismatch_mc.wilson_interval_percent(
+        branch_successes, samples
+    )
+    confidence_pass = (
+        error_wilson[0] >= targets["mismatch_target_yield_percent"]
+        and branch_wilson[0] >= targets["mismatch_target_yield_percent"]
+    )
     headroom = number(
         "validation headroom", validation["min_sensor_headroom_v"],
         minimum=-math.inf,
@@ -223,6 +287,12 @@ def analyze(
         and independent_seeds
         and error_yield >= targets["mismatch_target_yield_percent"]
         and branch_yield >= targets["mismatch_target_yield_percent"]
+        and (
+            not targets[
+                "mismatch_wilson_lower_bound_must_meet_yield_target"
+            ]
+            or confidence_pass
+        )
     )
     validation_headroom_pass = (
         validation.get("headroom_pass") is True
@@ -308,11 +378,21 @@ def analyze(
             "seed_start": validation_start,
             "error_yield_percent": error_yield,
             "branch_yield_percent": branch_yield,
+            "error_pass_count": error_successes,
+            "branch_pass_count": branch_successes,
+            "error_yield_wilson_95_percent": error_wilson,
+            "branch_yield_wilson_95_percent": branch_wilson,
+            "confidence_level_percent": confidence_level,
+            "confidence_lower_bound_target_percent": float(
+                targets["mismatch_target_yield_percent"]
+            ),
+            "confidence_pass": confidence_pass,
             "headroom_pass": validation_headroom_pass,
             "min_sensor_headroom_v": headroom,
         },
         "qualification_components": {
             "independent_mismatch_pass": mismatch_pass,
+            "mismatch_confidence_pass": confidence_pass,
             "disjoint_validation_seeds": independent_seeds,
             "independent_headroom_pass": validation_headroom_pass,
             "dense_tt_ff_ss_pass": dense_pass,
@@ -338,9 +418,12 @@ def analyze(
             "max_temperature_step_c": grid_step,
         },
         "evidence_boundary": (
-            "Qualification is simulation-only. PASS makes the candidate eligible "
-            "for explicit release review; this tool never changes the release "
-            "architecture or creates silicon/layout claims."
+            "Qualification is simulation-only. The mismatch gate requires "
+            "the lower bound of a two-sided 95% Wilson interval to meet the "
+            "configured yield target for both error and branch matching. PASS "
+            "makes the candidate eligible for explicit release review; this "
+            "tool never changes the release architecture or creates "
+            "silicon/layout claims."
         ),
     }
 
