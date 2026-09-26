@@ -66,7 +66,7 @@
       "source_workflow_run_id": 36256551286
     },
     "six_point_candidate_20260926": {
-      "status": "DISCOVERY_ONLY_NOT_RELEASE_VALIDATED",
+      "status": "RETROSPECTIVE_SPLIT_ROBUSTNESS_PASS_NOT_RELEASE_VALIDATED",
       "calibration_anchors_c": [
         -40,
         -25,
@@ -75,7 +75,24 @@
         65,
         125
       ],
-      "discovery_error_yield_percent": 98
+      "fold_a_train_seeds": [
+        1001,
+        1050
+      ],
+      "fold_b_holdout_seeds": [
+        1051,
+        1100
+      ],
+      "fold_a_selected_same_schedule": true,
+      "fold_b_selected_same_schedule": true,
+      "fold_a_to_b_holdout_yield_percent": 98,
+      "fold_b_to_a_holdout_yield_percent": 98,
+      "combined_point_yield_percent": 98,
+      "combined_wilson_95_percent_ci": [
+        92.9988209271456,
+        99.44980324498376
+      ],
+      "evidence_boundary": "Retrospective two-fold study from one retained 100-seed run; not a new independent Monte-Carlo confirmation and does not validate the separate branch-mismatch target."
     }
   }
 }
