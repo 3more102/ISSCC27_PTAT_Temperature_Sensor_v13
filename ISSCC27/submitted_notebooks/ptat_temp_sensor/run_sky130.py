@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SPICE = ROOT / "spice"
+PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 
 def parse_temps(spec: str) -> list[float]:
     if ":" not in spec:
@@ -84,31 +85,42 @@ def render(mode: str, corner: str, temps: list[float], output_rel: str, model_li
         text = text.replace(old, new)
     tline = "foreach t " + " ".join(f"{x:g}" for x in temps)
     text, n = re.subn(r"(?m)^foreach t .*$", tline, text, count=1)
-    if n != 1 or "__" in text:
-        raise RuntimeError(f"template rendering failed for {mode}/{corner}")
+    leftovers = PLACEHOLDER_RE.findall(text)
+    if n != 1 or leftovers:
+        raise RuntimeError(
+            f"template rendering failed for {mode}/{corner}; unresolved={leftovers}"
+        )
     return text
 
 def validate_csv(path: Path, temps: list[float], mode: str) -> None:
     with path.open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f, skipinitialspace=True))
+    if not rows:
+        raise RuntimeError(f"{path}: no simulation rows")
     got = [float(r["temp_c"]) for r in rows]
     if len(got) != len(temps) or any(abs(a-b) > 1e-8 for a,b in zip(got, temps)):
         raise RuntimeError(f"{path}: unexpected temperature grid")
     required = {"temp_c","vgs_small_v","vgs_large_v","dvgs_v","supply_current_a","power_w"}
     if mode == "mirror":
         required |= {"branch_small_a","branch_large_a"}
-    if not rows or not required.issubset(rows[0]):
+    if not required.issubset(rows[0]):
         raise RuntimeError(f"{path}: missing expected columns")
 
 def run_one(mode: str, corner: str, temps: list[float], output_dir: Path,
             model_lib: Path, ngspice: str) -> Path:
+    output_dir = output_dir.resolve()
+    results_root = (ROOT/"results").resolve()
+    try:
+        output_dir.relative_to(results_root)
+    except ValueError as exc:
+        raise ValueError("--output-dir must be inside the project results directory") from exc
     output_dir.mkdir(parents=True, exist_ok=True)
     netdir = output_dir/"netlists"
     logdir = output_dir/"logs"
     netdir.mkdir(exist_ok=True)
     logdir.mkdir(exist_ok=True)
     csv_path = output_dir/f"ptat_{mode}_{corner}.csv"
-    output_rel = csv_path.relative_to(ROOT/"results").as_posix()
+    output_rel = csv_path.relative_to(results_root).as_posix()
     net = netdir/f"ptat_{mode}_{corner}.spice"
     net.write_text(render(mode, corner, temps, output_rel, model_lib), encoding="utf-8")
     proc = subprocess.run(
@@ -157,7 +169,9 @@ def main() -> int:
         "corners": args.corners,
         "outputs": outputs,
     }
-    (args.output_dir/"run_metadata.json").write_text(json.dumps(meta, indent=2)+"\n", encoding="utf-8")
+    (args.output_dir/"run_metadata.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True)+"\n", encoding="utf-8"
+    )
     print("SKY130 RUN: PASS")
     return 0
 

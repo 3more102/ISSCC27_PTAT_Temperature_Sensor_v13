@@ -2,11 +2,12 @@
 """Real SKY130 local-mismatch Monte Carlo for the mirror-biased PTAT core.
 
 Uses the PDK's tt_mm library section and one ngspice process per mismatch sample.
-A temperature sweep is performed within that process so each die keeps one
-mismatch realization across temperature.
+The .option seed is parsed before the PDK model library, so each process has a
+deterministic local-mismatch realization that remains fixed during its
+temperature sweep.
 """
 from __future__ import annotations
-import argparse, csv, json, math, shutil, subprocess, sys
+import argparse, csv, json, math, re, shutil, subprocess, sys
 from pathlib import Path
 from statistics import mean, pstdev
 
@@ -15,6 +16,7 @@ import run_sky130
 ROOT=Path(__file__).resolve().parent
 RELEASE=json.loads((ROOT/"release_requirements.json").read_text(encoding="utf-8"))
 ANCHORS=[float(x) for x in RELEASE["release_architecture"]["calibration_anchors_c"]]
+PLACEHOLDER_RE=re.compile(r"__[A-Z][A-Z0-9_]*__")
 
 def percentile(xs:list[float],q:float)->float:
     ys=sorted(xs)
@@ -41,6 +43,8 @@ def pwl_errors(rows:list[dict[str,float]])->list[float]:
         idx.append(hit[0])
     est=[math.nan]*len(t)
     for ia,ib in zip(idx[:-1],idx[1:]):
+        if v[ib] == v[ia]:
+            raise ValueError("zero PWL voltage span")
         g=(t[ib]-t[ia])/(v[ib]-v[ia]); b=t[ia]-g*v[ia]
         for j in range(ia,ib+1): est[j]=g*v[j]+b
     return [a-b for a,b in zip(est,t)]
@@ -60,20 +64,30 @@ def render(seed:int,temps:list[float],output_rel:str,model_lib:Path)->str:
         "__OUTPUT_CSV__":output_rel,
     }
     for a,b in rep.items(): text=text.replace(a,b)
-    if "__" in text: raise RuntimeError("mismatch template rendering incomplete")
+    leftovers=PLACEHOLDER_RE.findall(text)
+    if leftovers:
+        raise RuntimeError(f"mismatch template rendering incomplete: {leftovers}")
     return text
 
 def run_sample(seed:int,temps:list[float],out:Path,model_lib:Path,ngspice:str)->Path:
+    out=out.resolve()
+    results_root=(ROOT/"results").resolve()
+    try:
+        out.relative_to(results_root)
+    except ValueError as exc:
+        raise ValueError("--output-dir must be inside the project results directory") from exc
     netdir=out/"netlists"; logdir=out/"logs"
     netdir.mkdir(parents=True,exist_ok=True); logdir.mkdir(parents=True,exist_ok=True)
     csv_path=out/f"sample_{seed:05d}.csv"
-    rel=csv_path.relative_to(ROOT/"results").as_posix()
+    rel=csv_path.relative_to(results_root).as_posix()
     net=netdir/f"sample_{seed:05d}.spice"
     net.write_text(render(seed,temps,rel,model_lib),encoding="utf-8")
     p=subprocess.run([ngspice,"-b",str(net)],cwd=ROOT,text=True,capture_output=True,timeout=300)
-    (logdir/f"sample_{seed:05d}.log").write_text(p.stdout+"\n--- STDERR ---\n"+p.stderr,encoding="utf-8")
+    (logdir/f"sample_{seed:05d}.log").write_text(
+        p.stdout+"\n--- STDERR ---\n"+p.stderr,encoding="utf-8"
+    )
     if p.returncode!=0 or not csv_path.is_file():
-        raise RuntimeError(f"sample {seed} failed")
+        raise RuntimeError(f"sample {seed} failed; see {logdir}")
     return csv_path
 
 def analyze(files:list[Path],temps:list[float])->dict:
@@ -141,7 +155,9 @@ def main()->int:
         result=analyze(files,temps)
     except Exception as exc:
         print(f"MISMATCH MC: FAIL: {exc}",file=sys.stderr); return 1
-    (args.output_dir/"summary.json").write_text(json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+    (args.output_dir/"summary.json").write_text(
+        json.dumps(result,indent=2,sort_keys=True)+"\n",encoding="utf-8"
+    )
     print("MISMATCH MC:",result["status"])
     print("samples:",result["samples"],"yield:",result["yield_percent_error_le_target"])
     return 0 if result["status"]=="PASS" else 1

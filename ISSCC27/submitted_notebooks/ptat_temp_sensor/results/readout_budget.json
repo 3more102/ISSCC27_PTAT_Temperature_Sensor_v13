@@ -1,5 +1,5 @@
 {
-  "analog_gain": 10,
+  "analog_gain": 10.0,
   "bits": 12,
   "evidence_boundary": "Behavioral 12-bit ADC quantization applied to retained real-PDK voltages; no transistor-level ADC or ADC power claim.",
   "full_scale_utilization_target_max": 0.9,
