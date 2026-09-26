@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 import dense_characterization
 import mismatch_mc
+import mismatch_geometry_screen
 import run_sky130
 
 
@@ -128,3 +129,42 @@ def test_dense_provenance_requires_exact_pdk_revision(tmp_path):
     )
     with pytest.raises(ValueError, match="exact PDK revision is unknown"):
         dense_characterization.load_provenance(tmp_path)
+
+
+
+def test_anchor_parser_accepts_candidate_schedule():
+    anchors = mismatch_mc.parse_anchor_list("-40,-25,-5,25,65,125")
+    assert anchors == [-40.0, -25.0, -5.0, 25.0, 65.0, 125.0]
+
+
+def test_anchor_parser_rejects_unsorted_values():
+    with pytest.raises(ValueError, match="strictly increasing"):
+        mismatch_mc.parse_anchor_list("-40,25,0,125")
+
+
+def test_geometry_scale_parser_requires_increasing_positive_values():
+    assert mismatch_geometry_screen.parse_scales("8,16,24") == [
+        8.0,
+        16.0,
+        24.0,
+    ]
+    with pytest.raises(ValueError, match="positive"):
+        mismatch_geometry_screen.parse_scales("0,8")
+    with pytest.raises(ValueError, match="increasing"):
+        mismatch_geometry_screen.parse_scales("16,8")
+
+
+def test_mismatch_render_scales_w_and_l_together(tmp_path):
+    model = tmp_path / "sky130.lib.spice"
+    rendered = mismatch_mc.render(
+        1234,
+        [-40.0, 25.0, 125.0],
+        "scaled.csv",
+        model,
+        sensor_linear_scale=2.0,
+        mirror_linear_scale=3.0,
+    )
+    assert ".param VDDVAL=1.8 IREF=1e-07 LNS=1.0 WNS1=2.0 WNS2=16.0" in rendered
+    assert "LPM=3.0 WPM=12.0" in rendered
+    assert "__WNS1__" not in rendered
+    assert "__WPM__" not in rendered
