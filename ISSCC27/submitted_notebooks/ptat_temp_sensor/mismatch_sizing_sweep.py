@@ -10,9 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -22,44 +20,6 @@ import mismatch_mc
 import run_sky130
 
 ROOT = Path(__file__).resolve().parent
-TEMPLATE = ROOT / "spice" / "ptat_sky130_mismatch.template.spice"
-PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
-
-
-def render(
-    seed: int,
-    temps: list[float],
-    output_rel: str,
-    model_lib: Path,
-    iref_scale: float,
-    mirror_linear_scale: float,
-    sensor_linear_scale: float,
-) -> str:
-    d = run_sky130.load_design()["nominal_characterization_seed"]
-    nmos = d["sensor_nmos"]
-    pmos = d["mirror_pmos"]
-    text = TEMPLATE.read_text(encoding="utf-8")
-    replacements = {
-        "__SEED__": str(seed),
-        "__MODEL_LIB__": model_lib.as_posix(),
-        "__VDDVAL__": str(d["vdd_v"]),
-        "__IREF__": str(d["reference_current_a"] * iref_scale),
-        "__LNS__": str(nmos["l_um"] * sensor_linear_scale),
-        "__WNS1__": str(nmos["w_small_um"] * sensor_linear_scale),
-        "__WNS2__": str(nmos["w_large_um"] * sensor_linear_scale),
-        "__LPM__": str(pmos["l_um"] * mirror_linear_scale),
-        "__WPM__": str(pmos["w_um"] * mirror_linear_scale),
-        "__TEMPS__": " ".join(f"{x:g}" for x in temps),
-        "__OUTPUT_CSV__": output_rel,
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    leftovers = PLACEHOLDER_RE.findall(text)
-    if leftovers:
-        raise RuntimeError(f"sizing template rendering incomplete: {leftovers}")
-    return text
-
-
 def run_sample(
     seed: int,
     temps: list[float],
@@ -70,49 +30,24 @@ def run_sample(
     mirror_linear_scale: float,
     sensor_linear_scale: float,
 ) -> Path:
-    out = out.resolve()
-    results_root = (ROOT / "results").resolve()
-    try:
-        out.relative_to(results_root)
-    except ValueError as exc:
-        raise ValueError("--output-dir must be inside the results directory") from exc
+    """Delegate sample generation to the canonical mismatch runner.
 
-    netdir = out / "netlists"
-    logdir = out / "logs"
-    netdir.mkdir(parents=True, exist_ok=True)
-    logdir.mkdir(parents=True, exist_ok=True)
-    csv_path = out / f"sample_{seed:05d}.csv"
-    output_rel = csv_path.relative_to(results_root).as_posix()
-    netlist = netdir / f"sample_{seed:05d}.spice"
-    netlist.write_text(
-        render(
-            seed,
-            temps,
-            output_rel,
-            model_lib,
-            iref_scale,
-            mirror_linear_scale,
-            sensor_linear_scale,
+    Keeping one netlist renderer prevents sizing studies from silently drifting
+    from the release Monte-Carlo path as template parameters evolve.
+    """
+    nominal = run_sky130.load_design()["nominal_characterization_seed"]
+    return mismatch_mc.run_sample(
+        seed,
+        temps,
+        out,
+        model_lib,
+        ngspice,
+        sensor_linear_scale=sensor_linear_scale,
+        mirror_linear_scale=mirror_linear_scale,
+        reference_current_a=(
+            float(nominal["reference_current_a"]) * iref_scale
         ),
-        encoding="utf-8",
     )
-    runtime_dir = out / "runtime" / f"sample_{seed:05d}"
-    env, _ = run_sky130.prepare_ngspice_environment(runtime_dir)
-    proc = subprocess.run(
-        [ngspice, "-b", str(netlist)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=300,
-        env=env,
-    )
-    (logdir / f"sample_{seed:05d}.log").write_text(
-        proc.stdout + "\n--- STDERR ---\n" + proc.stderr,
-        encoding="utf-8",
-    )
-    if proc.returncode != 0 or not csv_path.is_file():
-        raise RuntimeError(f"sample {seed} failed; see {logdir}")
-    return csv_path
 
 
 def candidate_metrics(result: dict, files: list[Path]) -> dict:
