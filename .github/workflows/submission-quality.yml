@@ -107,39 +107,15 @@ jobs:
           --temps=-40:125:5 --anchors=-40,-20,25,75,125
           --vdd-v 1.2 --reference-current-a 1e-8
           --output-dir results/mismatch_lowpower_1p2v_10na --allow-fail
-      - name: Mismatch sizing exploration
+      - name: Mismatch sizing screen and independent validation
         run: |
-          python mismatch_sizing_sweep.py --samples-per-candidate 12 \
-            --jobs 4 --temps=-40:125:5
-      - name: Independent 100-seed validation of best sizing candidate
-        shell: bash
-        run: |
-          python - <<'PY' > /tmp/ptat_candidate.env
-          import json
-          from pathlib import Path
-
-          summary = json.loads(
-              Path("results/mismatch_sizing_sweep/summary.json").read_text()
-          )
-          candidate = summary["recommended_for_independent_validation"]
-          nominal_iref = 1.0e-7
-          print(f"IREF_A={nominal_iref * candidate['iref_scale']:.17g}")
-          print(f"MIRROR_SCALE={candidate['mirror_linear_scale']:.17g}")
-          print(f"SENSOR_SCALE={candidate['sensor_linear_scale']:.17g}")
-          print(f"CANDIDATE={candidate['candidate']}")
-          PY
-          source /tmp/ptat_candidate.env
-          echo "Validating $CANDIDATE on independent seeds 9001-9100"
-          python mismatch_mc.py \
-            --samples 100 \
-            --seed-start 9001 \
+          python mismatch_sizing_sweep.py \
+            --samples-per-candidate 12 \
+            --seed-start 3001 \
+            --validation-samples 100 \
+            --validation-seed-start 9001 \
             --jobs 4 \
-            --temps=-40:125:5 \
-            --reference-current-a "$IREF_A" \
-            --mirror-linear-scale "$MIRROR_SCALE" \
-            --sensor-linear-scale "$SENSOR_SCALE" \
-            --output-dir results/mismatch_candidate_independent \
-            --allow-fail
+            --temps=-40:125:5
       - name: Archive generated evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -153,4 +129,3 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_lowpower_1p2v_10na
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
-            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_candidate_independent
