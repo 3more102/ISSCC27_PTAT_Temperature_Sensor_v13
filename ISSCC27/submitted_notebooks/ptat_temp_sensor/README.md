@@ -106,10 +106,22 @@ transistor sizing. This is reported as a negative engineering result, not
 converted into a passing claim. The per-seed metrics and provenance are retained
 under `results/full_pdk_20260926/`.
 
-A discovery-only six-point schedule
-**−40, −25, −5, 25, 65, 125 °C** improved error yield to **98%** on those same
-100 samples. It is not part of the release architecture because it still
-requires independent-seed validation.
+A retrospective two-fold split-sample robustness study now reduces the tuning
+leakage in that six-point result. Seeds 1001–1050 and 1051–1100 were treated as
+disjoint folds. Each fold independently selected the same schedule,
+**−40, −25, −5, 25, 65, 125 °C**, using only its own 50 samples, and each
+opposite-fold evaluation passed **49/50 samples (98%)** at ≤0.5 °C. Across all
+100 samples the shared schedule passes 98/100; the Wilson 95% interval for that
+point estimate is approximately **93.0%–99.45%**.
+
+This is stronger than fitting all 100 seeds at once, but it remains a
+**retrospective study from one retained Monte-Carlo run**, not a new independent
+confirmation run. It is therefore not promoted into the release architecture,
+and it does not change the separate **4%** branch-mismatch yield failure.
+
+The retained compact study is
+`results/full_pdk_20260926/mismatch_calibration_holdout.json`. The raw artifact
+can be reprocessed with `mismatch_holdout_analysis.py`.
 
 ## Physical implementation
 
