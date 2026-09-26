@@ -126,6 +126,24 @@ def test_mismatch_sizing_preserves_operating_ratios_and_scales_area():
     )
 
 
+def test_alternate_sizing_study_uses_canonical_wilson_interval():
+    summary = {
+        "samples": 100,
+        "per_sample": [
+            {
+                "pass_error_target": index < 98,
+                "pass_branch_mismatch_target": index < 100,
+            }
+            for index in range(100)
+        ],
+    }
+    mismatch_sizing_study.enrich_yield_intervals(summary)
+    assert summary["error_pass_count"] == 98
+    assert summary["branch_pass_count"] == 100
+    assert summary["error_yield_wilson_95_percent"][0] < 95.0
+    assert summary["branch_yield_wilson_95_percent"][0] > 95.0
+
+
 def test_mismatch_sizing_candidate_score_prioritizes_yield_deficit():
     better_yield = {
         "yield_target_percent": 95.0,
