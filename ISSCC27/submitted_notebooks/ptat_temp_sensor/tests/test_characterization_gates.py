@@ -223,3 +223,14 @@ def test_dense_characterization_accepts_explicit_anchor_schedule(tmp_path):
     assert result["worst_five_point_pwl_max_abs_error_c"] < 1e-9
     assert result["status"] == "PASS"
 
+
+
+def test_dense_characterization_rejects_incomplete_anchor_coverage():
+    temps = [-40.0, -20.0, 0.0, 20.0, 40.0]
+    volts = [0.05, 0.055, 0.06, 0.065, 0.07]
+    with pytest.raises(ValueError, match="cover the full dense temperature grid"):
+        dense_characterization.fixed_pwl_errors(
+            temps,
+            volts,
+            [-20.0, 0.0, 20.0],
+        )
