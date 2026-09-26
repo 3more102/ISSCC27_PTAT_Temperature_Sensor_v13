@@ -295,7 +295,7 @@ def test_sizing_candidate_qualification_rejects_evidence_mismatch():
         match="mirror linear scale",
     ):
         sizing_candidate_qualification.analyze(
-            sweep, dense, metadata, readout, 1.0e-7
+            sweep, dense, metadata, candidate_readout(), 1.0e-7
         )
 
 
