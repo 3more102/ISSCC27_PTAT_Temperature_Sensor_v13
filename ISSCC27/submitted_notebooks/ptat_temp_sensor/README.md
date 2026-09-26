@@ -123,6 +123,42 @@ The retained compact study is
 `results/full_pdk_20260926/mismatch_calibration_holdout.json`. The raw artifact
 can be reprocessed with `mismatch_holdout_analysis.py`.
 
+## Independent candidate validation
+
+CI run 36259524511 added genuinely disjoint validation evidence for the
+low-power and mismatch-sizing candidates using the same pinned SKY130/open_pdks
+revision.
+
+The **1.2 V / 10 nA** operating-point candidate was evaluated on 100 independent
+seeds (7001–7100). Its calibrated temperature error passed on **100%** of
+samples, with p95 maximum error **0.378 °C** and worst maximum error
+**0.462 °C**, but the ≤1% branch-mismatch yield was only **5%**. It therefore
+fails the statistical release contract despite its strong temperature-error
+result.
+
+The sizing screen selected **`i1_m16_s1`** for independent validation:
+nominal sensor geometry, 16× linear PMOS-mirror scaling (256× mirror device
+area), and the nominal 100 nA reference current. On the disjoint 100-seed set
+9001–9100 it achieved:
+
+- temperature-error yield at ≤0.5 °C: **66%**;
+- branch-mismatch yield at ≤1%: **64%**;
+- p95 maximum temperature error: **0.770 °C**;
+- p95 maximum branch mismatch: **1.929%**;
+- minimum sensor headroom: **1.169 V**.
+
+The same candidate still passes deterministic dense TT/FF/SS verification
+(**0.472 °C** worst PWL error, **0.950%** worst deterministic mirror mismatch)
+and the behavioral 12-bit / gain-10 readout budget (**0.478 °C** worst
+quantized sampled error). The final machine-evaluated result is therefore
+**`NOT_QUALIFIED_FOR_RELEASE_REVIEW`** because the independent mismatch
+criterion fails. The release architecture remains unchanged.
+
+The compact retained record is
+`results/full_pdk_20260926/candidate_validation_summary.json`, tied to workflow
+run 36259524511 and artifact digest
+`sha256:489e26dc01ed0dde54091e204d3162c47d472d969b48dd4b153a9bb59c2d3c84`.
+
 ## Physical implementation
 
 A layout is encouraged by the Code-a-Chip program but not required. The
