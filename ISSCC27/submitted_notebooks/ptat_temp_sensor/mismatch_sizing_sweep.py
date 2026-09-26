@@ -155,6 +155,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--samples-per-candidate", type=int, default=12)
     parser.add_argument("--seed-start", type=int, default=3001)
+    parser.add_argument("--validation-samples", type=int, default=0)
+    parser.add_argument("--validation-seed-start", type=int, default=5001)
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--temps", default="-40:125:5")
     parser.add_argument(
@@ -163,7 +165,12 @@ def main() -> int:
         default=ROOT / "results" / "mismatch_sizing_sweep",
     )
     args = parser.parse_args()
-    if args.samples_per_candidate < 2 or args.jobs < 1:
+    if (
+        args.samples_per_candidate < 2
+        or args.validation_samples < 0
+        or args.validation_samples == 1
+        or args.jobs < 1
+    ):
         print("MISMATCH SIZING SWEEP: FAIL: invalid sample/job count")
         return 2
 
@@ -248,8 +255,60 @@ def main() -> int:
             x["worst_max_power_uw"],
         ),
     )
+    best = ranked[0]
+    validation = None
+    if args.validation_samples >= 2:
+        validation_out = args.output_dir / "independent_validation"
+        validation_seeds = [
+            args.validation_seed_start + idx
+            for idx in range(args.validation_samples)
+        ]
+        try:
+            with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+                futures = [
+                    pool.submit(
+                        run_sample,
+                        seed,
+                        temps,
+                        validation_out,
+                        model,
+                        ngspice,
+                        best["iref_scale"],
+                        best["mirror_linear_scale"],
+                        best["sensor_linear_scale"],
+                    )
+                    for seed in validation_seeds
+                ]
+                validation_files = [
+                    future.result()
+                    for future in as_completed(futures)
+                ]
+            validation_files.sort()
+            validation_result = mismatch_mc.analyze(
+                validation_files, temps
+            )
+            validation = {
+                "candidate": best["candidate"],
+                "samples": args.validation_samples,
+                "seed_start": args.validation_seed_start,
+                "status": validation_result["status"],
+                **candidate_metrics(
+                    validation_result, validation_files
+                ),
+            }
+        except Exception as exc:
+            print(
+                f"MISMATCH SIZING SWEEP: VALIDATION FAIL: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
     summary = {
-        "status": "EXPLORATORY_ONLY",
+        "status": (
+            "INDEPENDENT_VALIDATION_PASS"
+            if validation is not None and validation["status"] == "PASS"
+            else "EXPLORATORY_ONLY"
+        ),
         "evidence_class": (
             "SKY130/open_pdks tt_mm sizing screen; not release validation"
         ),
@@ -263,14 +322,14 @@ def main() -> int:
             "p95 branch mismatch, and worst power"
         ),
         "candidates": ranked,
-        "recommended_for_independent_validation": ranked[0],
+        "recommended_for_independent_validation": best,
+        "independent_validation": validation,
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    best = ranked[0]
     print("MISMATCH SIZING SWEEP: COMPLETE")
     print("best candidate:", best["candidate"])
     print("headroom pass:", best["headroom_pass"])
@@ -282,6 +341,16 @@ def main() -> int:
         "p95 branch mismatch (%):",
         best["p95_max_branch_mismatch_percent"],
     )
+    if validation is not None:
+        print("independent validation:", validation["status"])
+        print(
+            "validation branch yield (%):",
+            validation["branch_yield_percent"],
+        )
+        print(
+            "validation error yield (%):",
+            validation["error_yield_percent"],
+        )
     return 0
 
 
