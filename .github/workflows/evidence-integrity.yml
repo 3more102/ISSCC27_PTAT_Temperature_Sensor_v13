@@ -23,3 +23,7 @@ jobs:
       - name: Verify retained SKY130 evidence
         working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
         run: python evidence_audit.py
+
+      - name: Verify retained-PDK calibration analysis
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+        run: python pdk_calibration_analysis.py --check
