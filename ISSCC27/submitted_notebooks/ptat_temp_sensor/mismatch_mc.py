@@ -54,6 +54,34 @@ def percentile(xs: list[float], q: float) -> float:
     return ys[lo] * (hi - pos) + ys[hi] * (pos - lo)
 
 
+
+def wilson_interval_percent(
+    successes: int,
+    total: int,
+    z: float = 1.959963984540054,
+) -> list[float]:
+    """Return a two-sided Wilson score interval in percent."""
+    if total <= 0:
+        raise ValueError("Wilson interval requires total > 0")
+    if successes < 0 or successes > total:
+        raise ValueError("Wilson interval successes must be within [0, total]")
+    p = successes / total
+    denom = 1.0 + z * z / total
+    center = (p + z * z / (2.0 * total)) / denom
+    radius = (
+        z
+        * math.sqrt(
+            p * (1.0 - p) / total
+            + z * z / (4.0 * total * total)
+        )
+        / denom
+    )
+    return [
+        100.0 * (center - radius),
+        100.0 * (center + radius),
+    ]
+
+
 def parse_anchor_list(text: str) -> list[float]:
     anchors = [float(x.strip()) for x in text.split(",") if x.strip()]
     if len(anchors) < 2:
@@ -295,15 +323,19 @@ def analyze(
         )
 
     errors = [x["max_abs_error_c"] for x in samples]
-    yield_pct = (
-        100
-        * sum(x["pass_error_target"] for x in samples)
-        / len(samples)
+    error_successes = sum(
+        bool(x["pass_error_target"]) for x in samples
     )
-    branch_yield_pct = (
-        100
-        * sum(x["pass_branch_mismatch_target"] for x in samples)
-        / len(samples)
+    branch_successes = sum(
+        bool(x["pass_branch_mismatch_target"]) for x in samples
+    )
+    yield_pct = 100 * error_successes / len(samples)
+    branch_yield_pct = 100 * branch_successes / len(samples)
+    error_yield_wilson = wilson_interval_percent(
+        error_successes, len(samples)
+    )
+    branch_yield_wilson = wilson_interval_percent(
+        branch_successes, len(samples)
     )
     min_samples = int(
         RELEASE["release_targets"]["mismatch_min_samples"]
@@ -340,6 +372,10 @@ def analyze(
         "temperature_c": temps,
         "yield_percent_error_le_target": yield_pct,
         "yield_percent_branch_mismatch_le_target": branch_yield_pct,
+        "error_pass_count": error_successes,
+        "branch_pass_count": branch_successes,
+        "error_yield_wilson_95_percent": error_yield_wilson,
+        "branch_yield_wilson_95_percent": branch_yield_wilson,
         "yield_target_percent": yield_target,
         "error_target_c": target,
         "branch_mismatch_target_percent": BRANCH_MISMATCH_TARGET,
