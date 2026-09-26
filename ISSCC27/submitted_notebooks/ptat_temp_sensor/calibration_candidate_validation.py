@@ -21,6 +21,10 @@ ROOT = Path(__file__).resolve().parent
 SEED_RE = re.compile(r"sample_(\d+)\.csv$")
 
 
+def candidate_status_is_unpromoted(status: object) -> bool:
+    return isinstance(status, str) and status.endswith("NOT_RELEASE_VALIDATED")
+
+
 def percentile(xs: list[float], q: float) -> float:
     ys = sorted(xs)
     if not ys:
@@ -241,8 +245,7 @@ def main() -> int:
         candidate_info = release["known_evidence"][
             "six_point_candidate_20260926"
         ]
-        candidate_status = str(candidate_info.get("status", ""))
-        if not candidate_status.endswith("NOT_RELEASE_VALIDATED"):
+        if not candidate_status_is_unpromoted(candidate_info.get("status")):
             raise ValueError(
                 "candidate must remain pre-declared and unpromoted "
                 "during validation"
