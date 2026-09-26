@@ -94,8 +94,7 @@ jobs:
         run: |
           python run_sky130.py --mode both --corners tt ff ss --temps=-40:125:5
           python dense_characterization.py
-      - name: Local mismatch Monte Carlo
-        run: python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5 --allow-fail
+      - name: Local mismatch Monte Carlo evidence\n        run: >-\n          python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5\n          --allow-fail --allow-fail
       - name: Mismatch sizing exploration
         run: |
           python mismatch_sizing_sweep.py --samples-per-candidate 12 \
