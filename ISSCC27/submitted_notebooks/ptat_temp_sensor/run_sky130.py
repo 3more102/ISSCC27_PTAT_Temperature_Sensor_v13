@@ -81,7 +81,13 @@ def load_design() -> dict:
     )
 
 
-def characterization_seed(linear_scale: float = 1.0) -> dict:
+def characterization_seed(
+    linear_scale: float = 1.0,
+    *,
+    vdd_v: float | None = None,
+    branch_current_a: float | None = None,
+    reference_current_a: float | None = None,
+) -> dict:
     """Return the nominal seed with W and L scaled together.
 
     Scaling W and L by the same factor preserves nominal W/L and the 8:1
@@ -92,6 +98,17 @@ def characterization_seed(linear_scale: float = 1.0) -> dict:
     if not math_isfinite_positive(linear_scale):
         raise ValueError("device linear scale must be a finite positive number")
     seed = copy.deepcopy(load_design()["nominal_characterization_seed"])
+    overrides = {
+        "vdd_v": vdd_v,
+        "branch_current_a": branch_current_a,
+        "reference_current_a": reference_current_a,
+    }
+    for key, value in overrides.items():
+        if value is None:
+            continue
+        if not math_isfinite_positive(value):
+            raise ValueError(f"{key} must be a finite positive number")
+        seed[key] = float(value)
     sensor = seed["sensor_nmos"]
     mirror = seed["mirror_pmos"]
     sensor["l_um"] *= linear_scale
@@ -159,8 +176,17 @@ def render(
     output_rel: str,
     model_lib: Path,
     device_linear_scale: float = 1.0,
+    *,
+    vdd_v: float | None = None,
+    branch_current_a: float | None = None,
+    reference_current_a: float | None = None,
 ) -> str:
-    seed = characterization_seed(device_linear_scale)
+    seed = characterization_seed(
+        device_linear_scale,
+        vdd_v=vdd_v,
+        branch_current_a=branch_current_a,
+        reference_current_a=reference_current_a,
+    )
     template = SPICE / (
         "ptat_sky130_mirror.template.spice"
         if mode == "mirror"
@@ -228,6 +254,10 @@ def run_one(
     model_lib: Path,
     ngspice: str,
     device_linear_scale: float = 1.0,
+    *,
+    vdd_v: float | None = None,
+    branch_current_a: float | None = None,
+    reference_current_a: float | None = None,
 ) -> Path:
     output_dir = output_dir.resolve()
     results_root = (ROOT/"results").resolve()
@@ -253,6 +283,9 @@ def run_one(
             output_rel,
             model_lib,
             device_linear_scale=device_linear_scale,
+            vdd_v=vdd_v,
+            branch_current_a=branch_current_a,
+            reference_current_a=reference_current_a,
         ),
         encoding="utf-8",
     )
@@ -283,6 +316,21 @@ def main() -> int:
     ap.add_argument("--corners", nargs="+", default=["tt", "ff", "ss"])
     ap.add_argument("--temps", default="-40:125:5")
     ap.add_argument(
+        "--vdd-v",
+        type=float,
+        help="override nominal supply voltage for this generated evidence",
+    )
+    ap.add_argument(
+        "--branch-current-a",
+        type=float,
+        help="override ideal-bias branch current for this generated evidence",
+    )
+    ap.add_argument(
+        "--reference-current-a",
+        type=float,
+        help="override PMOS-mirror reference current for this generated evidence",
+    )
+    ap.add_argument(
         "--device-linear-scale",
         type=float,
         default=1.0,
@@ -298,7 +346,12 @@ def main() -> int:
     )
     args = ap.parse_args()
     try:
-        seed = characterization_seed(args.device_linear_scale)
+        seed = characterization_seed(
+            args.device_linear_scale,
+            vdd_v=args.vdd_v,
+            branch_current_a=args.branch_current_a,
+            reference_current_a=args.reference_current_a,
+        )
         temps = parse_temps(args.temps)
     except ValueError as exc:
         print(f"SKY130 RUN: FAIL: {exc}", file=sys.stderr)
@@ -323,6 +376,9 @@ def main() -> int:
                             model_lib,
                             ngspice,
                             device_linear_scale=args.device_linear_scale,
+                            vdd_v=args.vdd_v,
+                            branch_current_a=args.branch_current_a,
+                            reference_current_a=args.reference_current_a,
                         )
                     )
                 )
@@ -344,6 +400,11 @@ def main() -> int:
         "corners": args.corners,
         "device_linear_scale": args.device_linear_scale,
         "effective_geometry": seed_geometry(seed),
+        "operating_point": {
+            "vdd_v": seed["vdd_v"],
+            "branch_current_a": seed["branch_current_a"],
+            "reference_current_a": seed["reference_current_a"],
+        },
         "outputs": outputs,
     }
     (args.output_dir/"run_metadata.json").write_text(
