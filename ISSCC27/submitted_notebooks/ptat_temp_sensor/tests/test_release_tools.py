@@ -204,6 +204,17 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
     assert result["status"] == "NOT_QUALIFIED_FOR_RELEASE_REVIEW"
     assert result["qualified_for_release_review"] is False
 
+    dense["status"] = "PASS"
+    validation["headroom_pass"] = False
+    result = sizing_candidate_qualification.analyze(
+        sweep, dense, metadata, 1.0e-7
+    )
+    assert result["status"] == "NOT_QUALIFIED_FOR_RELEASE_REVIEW"
+    assert (
+        result["qualification_components"]["independent_headroom_pass"]
+        is False
+    )
+
 
 def test_sizing_candidate_qualification_rejects_evidence_mismatch():
     sweep = {
