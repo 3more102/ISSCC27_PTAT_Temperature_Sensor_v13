@@ -51,3 +51,14 @@ def test_sky130_runner_uses_isolated_hsa_compatibility_mode(tmp_path):
     assert env["HOME"] == str((tmp_path / "ngspice_home").resolve())
     assert spiceinit == (tmp_path / "ngspice_home" / ".spiceinit").resolve()
     assert spiceinit.read_text(encoding="utf-8") == "set ngbehavior=hsa\n"
+
+
+def test_sky130_render_matches_retained_micron_dimension_convention(tmp_path):
+    model = tmp_path / "sky130.lib.spice"
+    ideal = run_sky130.render("ideal", "tt", [-40.0, 125.0], "dense_pdk/test.csv", model)
+    assert "LCH=0.5" in ideal
+    assert "W1=1.0" in ideal
+    assert "W2=8.0" in ideal
+    assert "0.5u" not in ideal
+    assert "1.0u" not in ideal
+    assert "8.0u" not in ideal
