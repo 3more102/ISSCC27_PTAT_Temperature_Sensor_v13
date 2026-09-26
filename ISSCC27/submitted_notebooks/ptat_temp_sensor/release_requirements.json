@@ -29,7 +29,9 @@
     "mismatch_target_yield_percent": 95,
     "adc_quantization_rms_c_max": 0.1,
     "adc_full_scale_utilization_max": 0.9,
-    "quantized_sampled_grid_pwl_max_abs_error_c_max": 0.5
+    "quantized_sampled_grid_pwl_max_abs_error_c_max": 0.5,
+    "mismatch_confidence_level_percent": 95,
+    "mismatch_wilson_lower_bound_must_meet_yield_target": true
   },
   "known_evidence": {
     "retained_run": 221,
