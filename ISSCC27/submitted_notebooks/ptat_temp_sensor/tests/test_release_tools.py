@@ -134,3 +134,18 @@ def test_retained_full_pdk_evidence_is_internally_consistent():
     assert result["dense_status"] == "PASS"
     assert result["mismatch_status"] == "FAIL"
     assert result["candidate_status"].endswith("NOT_RELEASE_VALIDATED")
+
+def test_sky130_runner_supports_independent_sensor_and_mirror_scaling():
+    seed = run_sky130.characterization_seed(
+        sensor_linear_scale=2.0,
+        mirror_linear_scale=24.0,
+    )
+    sensor = seed["sensor_nmos"]
+    mirror = seed["mirror_pmos"]
+
+    assert sensor["l_um"] == 1.0
+    assert sensor["w_small_um"] == 2.0
+    assert sensor["w_large_um"] == 16.0
+    assert mirror["l_um"] == 24.0
+    assert mirror["w_um"] == 96.0
+

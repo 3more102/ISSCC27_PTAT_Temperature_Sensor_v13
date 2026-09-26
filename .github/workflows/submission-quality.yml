@@ -115,6 +115,54 @@ jobs:
             --validation-seed-start 9001 \
             --jobs 4 \
             --temps=-40:125:5
+      - name: Dense TT/FF/SS validation of selected sizing candidate
+        shell: bash
+        run: |
+          python - <<'PY' > /tmp/ptat_dense_candidate.env
+          import json
+          from pathlib import Path
+
+          summary = json.loads(
+              Path("results/mismatch_sizing_sweep/summary.json").read_text()
+          )
+          candidate = summary["recommended_for_independent_validation"]
+          if candidate is None:
+              print("SKIP_DENSE_CANDIDATE=1")
+          else:
+              nominal_iref = 1.0e-7
+              print("SKIP_DENSE_CANDIDATE=0")
+              print(
+                  f"IREF_A={nominal_iref * candidate['iref_scale']:.17g}"
+              )
+              print(
+                  "MIRROR_SCALE="
+                  f"{candidate['mirror_linear_scale']:.17g}"
+              )
+              print(
+                  "SENSOR_SCALE="
+                  f"{candidate['sensor_linear_scale']:.17g}"
+              )
+              print(f"CANDIDATE={candidate['candidate']}")
+          PY
+          source /tmp/ptat_dense_candidate.env
+          if [ "$SKIP_DENSE_CANDIDATE" = "1" ]; then
+            echo "No headroom-qualified sizing candidate; dense validation skipped"
+            exit 0
+          fi
+          echo "Dense-validating $CANDIDATE across TT/FF/SS"
+          python run_sky130.py \
+            --mode both \
+            --corners tt ff ss \
+            --temps=-40:125:5 \
+            --branch-current-a "$IREF_A" \
+            --reference-current-a "$IREF_A" \
+            --sensor-linear-scale "$SENSOR_SCALE" \
+            --mirror-linear-scale "$MIRROR_SCALE" \
+            --output-dir results/dense_sizing_candidate
+          python dense_characterization.py \
+            --input-dir results/dense_sizing_candidate \
+            --output results/dense_sizing_candidate_analysis.json \
+            --allow-fail
       - name: Archive generated evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -128,3 +176,5 @@ jobs:
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_lowpower_1p2v_10na
             ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_analysis.json
