@@ -14,6 +14,15 @@ import sizing_candidate_qualification
 import mismatch_sizing_study
 
 
+MATCHING_PROVENANCE = {
+    "ngspice": "ngspice-46",
+    "ngspice_compatibility_mode": "hsa",
+    "pdk_revision": "test-pdk-revision",
+    "model_sha256": "a" * 64,
+    "design_requirements_sha256": "b" * 64,
+}
+
+
 def test_retained_five_point_target_is_met():
     r = pdk_calibration_analysis.analyze()
     assert r["five_point_pwl_grid_calibration"]["worst_max_abs_error_c"] < 0.5
@@ -172,8 +181,10 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
     sweep = {
         "recommended_for_independent_validation": selected,
         "independent_validation": validation,
+        "provenance": MATCHING_PROVENANCE.copy(),
     }
     metadata = {
+        **MATCHING_PROVENANCE,
         "sensor_linear_scale": 2.0,
         "mirror_linear_scale": 8.0,
         "operating_point": {
@@ -218,6 +229,7 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
 
 def test_sizing_candidate_qualification_rejects_evidence_mismatch():
     sweep = {
+        "provenance": MATCHING_PROVENANCE.copy(),
         "recommended_for_independent_validation": {
             "candidate": "i1_m4_s2",
             "iref_scale": 1.0,
@@ -236,6 +248,7 @@ def test_sizing_candidate_qualification_rejects_evidence_mismatch():
         },
     }
     metadata = {
+        **MATCHING_PROVENANCE,
         "sensor_linear_scale": 2.0,
         "mirror_linear_scale": 8.0,
         "operating_point": {
@@ -256,4 +269,19 @@ def test_sizing_candidate_qualification_rejects_evidence_mismatch():
     ):
         sizing_candidate_qualification.analyze(
             sweep, dense, metadata, 1.0e-7
+        )
+
+
+
+def test_sizing_candidate_qualification_rejects_provenance_mismatch():
+    sweep = {"provenance": MATCHING_PROVENANCE.copy()}
+    dense_metadata = MATCHING_PROVENANCE.copy()
+    dense_metadata["pdk_revision"] = "different-pdk-revision"
+
+    with __import__("pytest").raises(
+        sizing_candidate_qualification.QualificationError,
+        match="pdk_revision provenance mismatch",
+    ):
+        sizing_candidate_qualification.require_matching_provenance(
+            sweep, dense_metadata
         )
