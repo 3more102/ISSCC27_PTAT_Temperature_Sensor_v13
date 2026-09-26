@@ -7,6 +7,10 @@ on:
       - "work/**"
   pull_request:
 
+concurrency:
+  group: submission-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   submission-quality:
     runs-on: ubuntu-latest
@@ -33,6 +37,32 @@ jobs:
         run: jupyter nbconvert --to notebook --execute PTAT_Temperature_Sensor_Code_a_Chip.ipynb --output /tmp/PTAT_Temperature_Sensor_Code_a_Chip.executed.ipynb --ExecutePreprocessor.timeout=120
       - name: Unit tests
         run: pytest -q
+
+  upstream-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install upstream notebook-check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+          python -m pip install flake8 nbQA pytest nbmake pandas graphviz matplotlib
+      - name: Match upstream notebook lint
+        run: nbqa flake8 --ignore=E402,E226 PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+      - name: Match upstream Colab badge check
+        run: |
+          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb | grep 'sscs-ose'
+      - name: Match upstream notebook execution
+        run: pytest --nbmake PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+
 
   full-pdk-verification:
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 3
