@@ -108,11 +108,15 @@ jobs:
           --output-dir results/mismatch_lowpower_1p2v_10na --allow-fail
       - name: Mismatch sizing screen and independent validation
         run: |
+          # A new adaptive study must not reuse the already examined 9001-9100
+          # holdout. Retries of this workflow run intentionally keep their seeds.
+          VALIDATION_SEED_START=$(python -c \
+            'import os; from seed_policy import workflow_validation_seed; print(workflow_validation_seed(int(os.environ["GITHUB_RUN_NUMBER"])))')
           python mismatch_sizing_sweep.py \
             --samples-per-candidate 12 \
             --seed-start 3001 \
             --validation-samples 100 \
-            --validation-seed-start 9001 \
+            --validation-seed-start "$VALIDATION_SEED_START" \
             --jobs 4 \
             --temps=-40:125:5
       - name: Dense TT/FF/SS validation of selected sizing candidate
