@@ -149,7 +149,10 @@ def main() -> int:
     # sensor geometries so the next selection is evidence-driven rather than
     # an untested extrapolation from the 16x candidate.
     iref_scales = (1.0, 10.0)
-    mirror_scales = (1.0, 4.0, 8.0, 16.0, 24.0, 32.0, 48.0)
+    # Refine the interval above the 16x candidate: independent validation
+    # reached 98% temperature-error yield but only 83% branch-mismatch yield.
+    # 32x and 48x were non-convergent, so probe intermediate mirror areas.
+    mirror_scales = (1.0, 4.0, 8.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 48.0)
     sensor_scales = (1.0, 2.0, 4.0)
     try:
         model = run_sky130.discover_model_lib()
