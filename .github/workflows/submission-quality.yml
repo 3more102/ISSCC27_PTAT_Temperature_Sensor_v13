@@ -1,0 +1,199 @@
+name: Submission Quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: submission-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  submission-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify behavioral readout budget
+        run: python readout_budget.py --check
+      - name: Retained evidence integrity
+        run: python evidence_audit.py
+      - name: Retained calibration integrity
+        run: python pdk_calibration_analysis.py --check
+      - name: Submission preflight
+        run: python submission_preflight.py
+      - name: Execute notebook
+        run: jupyter nbconvert --to notebook --execute PTAT_Temperature_Sensor_Code_a_Chip.ipynb --output /tmp/PTAT_Temperature_Sensor_Code_a_Chip.executed.ipynb --ExecutePreprocessor.timeout=120
+      - name: Unit tests
+        run: pytest -q
+
+  upstream-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install upstream notebook-check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+          python -m pip install flake8 nbQA pytest nbmake pandas graphviz matplotlib
+      - name: Match upstream notebook lint
+        run: nbqa flake8 --ignore=E402,E226 PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+      - name: Match upstream Colab badge check
+        run: |
+          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+          grep colab-badge PTAT_Temperature_Sensor_Code_a_Chip.ipynb | (! grep -v 'sscs-ose')
+      - name: Match upstream notebook execution
+        run: pytest --nbmake PTAT_Temperature_Sensor_Code_a_Chip.ipynb
+
+  full-pdk-verification:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PDK_ROOT: /home/runner/pdk
+      SKY130_PDK_REVISION: 12df12e2e74145e31c5a13de02f9a1e176b56e67
+    defaults:
+      run:
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ngspice and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+          python -m pip install -r requirements.txt
+      - name: Install pinned SKY130 PDK
+        uses: TinyTapeout/volare-action@v2
+        with:
+          pdk_name: sky130
+          pdk_version: 12df12e2e74145e31c5a13de02f9a1e176b56e67
+          pdk_root: /home/runner/pdk
+      - name: Dense TT/FF/SS characterization
+        run: |
+          python run_sky130.py --mode both --corners tt ff ss --temps=-40:125:5
+          python dense_characterization.py
+      - name: Dense low-power 1.2 V / 10 nA candidate
+        run: |
+          python run_sky130.py --mode both --corners tt ff ss             --temps=-40:125:5 --vdd-v 1.2             --branch-current-a 1e-8 --reference-current-a 1e-8             --output-dir results/dense_lowpower_1p2v_10na
+          python dense_characterization.py             --input-dir results/dense_lowpower_1p2v_10na             --output results/dense_lowpower_1p2v_10na_analysis.json             --anchors=-40,-20,25,75,125 --allow-fail
+      - name: Local mismatch Monte Carlo evidence
+        run: >-
+          python mismatch_mc.py --samples 100 --jobs 4 --temps=-40:125:5
+          --allow-fail
+      - name: Independent low-power 1.2 V / 10 nA mismatch validation
+        run: >-
+          python mismatch_mc.py --samples 100 --seed-start 7001 --jobs 4
+          --temps=-40:125:5 --anchors=-40,-20,25,75,125
+          --vdd-v 1.2 --reference-current-a 1e-8
+          --output-dir results/mismatch_lowpower_1p2v_10na --allow-fail
+      - name: Mismatch sizing screen and independent validation
+        run: |
+          # A new adaptive study must not reuse the already examined 9001-9100
+          # holdout. Retries of this workflow run intentionally keep their seeds.
+          VALIDATION_SEED_START=$(python -c \
+            'import os; from seed_policy import workflow_validation_seed; print(workflow_validation_seed(int(os.environ["GITHUB_RUN_NUMBER"])))')
+          python mismatch_sizing_sweep.py \
+            --samples-per-candidate 12 \
+            --seed-start 3001 \
+            --validation-samples 100 \
+            --validation-seed-start "$VALIDATION_SEED_START" \
+            --jobs 4 \
+            --temps=-40:125:5
+      - name: Dense TT/FF/SS validation of selected sizing candidate
+        shell: bash
+        run: |
+          python - <<'PY' > /tmp/ptat_dense_candidate.env
+          import json
+          from pathlib import Path
+
+          summary = json.loads(
+              Path("results/mismatch_sizing_sweep/summary.json").read_text()
+          )
+          candidate = summary["recommended_for_independent_validation"]
+          if candidate is None:
+              print("SKIP_DENSE_CANDIDATE=1")
+          else:
+              nominal_iref = 1.0e-7
+              print("SKIP_DENSE_CANDIDATE=0")
+              print(
+                  f"IREF_A={nominal_iref * candidate['iref_scale']:.17g}"
+              )
+              print(
+                  "MIRROR_SCALE="
+                  f"{candidate['mirror_linear_scale']:.17g}"
+              )
+              print(
+                  "SENSOR_SCALE="
+                  f"{candidate['sensor_linear_scale']:.17g}"
+              )
+              print(f"CANDIDATE={candidate['candidate']}")
+          PY
+          source /tmp/ptat_dense_candidate.env
+          if [ "$SKIP_DENSE_CANDIDATE" = "1" ]; then
+            echo "No headroom-qualified sizing candidate; dense validation skipped"
+            exit 0
+          fi
+          echo "Dense-validating $CANDIDATE across TT/FF/SS"
+          python run_sky130.py \
+            --mode both \
+            --corners tt ff ss \
+            --temps=-40:125:5 \
+            --branch-current-a "$IREF_A" \
+            --reference-current-a "$IREF_A" \
+            --sensor-linear-scale "$SENSOR_SCALE" \
+            --mirror-linear-scale "$MIRROR_SCALE" \
+            --output-dir results/dense_sizing_candidate
+          python dense_characterization.py \
+            --input-dir results/dense_sizing_candidate \
+            --output results/dense_sizing_candidate_analysis.json \
+            --allow-fail
+      - name: Behavioral readout validation of selected sizing candidate
+        shell: bash
+        run: |
+          if [ ! -f results/dense_sizing_candidate/run_metadata.json ]; then
+            echo "No sizing candidate dense evidence; readout validation skipped"
+            exit 0
+          fi
+          python readout_budget.py \
+            --input-dir results/dense_sizing_candidate \
+            --output results/dense_sizing_candidate_readout.json \
+            --allow-fail
+      - name: Summarize sizing candidate qualification
+        run: python sizing_candidate_qualification.py
+      - name: Archive generated evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isscc27-full-pdk-verification
+          path: |
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_pdk_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_lowpower_1p2v_10na
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_lowpower_1p2v_10na_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_mc
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_lowpower_1p2v_10na
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/mismatch_sizing_sweep
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_analysis.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/dense_sizing_candidate_readout.json
+            ISSCC27/submitted_notebooks/ptat_temp_sensor/results/sizing_candidate_qualification.json

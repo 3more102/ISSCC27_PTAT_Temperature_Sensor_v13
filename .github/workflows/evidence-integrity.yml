@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "work/**"
   pull_request:
 
 jobs:
@@ -27,3 +26,7 @@ jobs:
       - name: Verify retained-PDK calibration analysis
         working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
         run: python pdk_calibration_analysis.py --check
+
+      - name: Verify retained full-PDK evidence consistency
+        working-directory: ISSCC27/submitted_notebooks/ptat_temp_sensor
+        run: python full_pdk_evidence_audit.py
