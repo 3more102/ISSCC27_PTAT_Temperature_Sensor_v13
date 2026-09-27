@@ -119,6 +119,13 @@ This is stronger than fitting all 100 seeds at once, but it remains a
 confirmation run. It is therefore not promoted into the release architecture,
 and it does not change the separate **4%** branch-mismatch yield failure.
 
+For any future sizing candidate, the release-review gate is stricter than the
+raw point estimate: an independent run must use at least 100 disjoint validation
+seeds, and the **lower bound of the two-sided 95% Wilson interval** must be at
+least 95% for both temperature-error yield and branch-matching yield. Therefore
+results such as 95/100 or 98/100 are not treated as statistical proof of a 95%
+underlying yield.
+
 The retained compact study is
 `results/full_pdk_20260926/mismatch_calibration_holdout.json`. The raw artifact
 can be reprocessed with `mismatch_holdout_analysis.py`.

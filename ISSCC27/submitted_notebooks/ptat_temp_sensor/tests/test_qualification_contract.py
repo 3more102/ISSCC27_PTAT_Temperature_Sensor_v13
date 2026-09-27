@@ -36,8 +36,8 @@ def evidence():
             "status": "PASS",
             "samples": 100,
             "seed_start": 9001,
-            "error_yield_percent": 97.0,
-            "branch_yield_percent": 96.0,
+            "error_yield_percent": 100.0,
+            "branch_yield_percent": 100.0,
             "headroom_pass": True,
             "min_sensor_headroom_v": 0.5,
         },
@@ -137,6 +137,22 @@ def test_invalid_validation_numbers_fail_closed(evidence, field, value):
     evidence[0]["independent_validation"][field] = value
     with pytest.raises(qualification.QualificationError):
         qualification.analyze(*evidence)
+
+
+def test_observed_98_percent_does_not_prove_95_percent_yield(evidence):
+    validation = evidence[0]["independent_validation"]
+    validation["error_yield_percent"] = 98.0
+    validation["branch_yield_percent"] = 98.0
+
+    result = qualification.analyze(*evidence)
+
+    assert result["independent_mismatch"]["error_yield_percent"] == 98.0
+    assert (
+        result["independent_mismatch"]["error_yield_wilson_95_percent"][0]
+        < 95.0
+    )
+    assert result["qualification_components"]["mismatch_confidence_pass"] is False
+    assert result["qualified_for_release_review"] is False
 
 
 def test_current_dense_metric_does_not_require_legacy_alias(evidence):

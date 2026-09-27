@@ -72,6 +72,14 @@ def candidate_metrics(result: dict, files: list[Path]) -> dict:
         "branch_yield_percent": result[
             "yield_percent_branch_mismatch_le_target"
         ],
+        "error_pass_count": result["error_pass_count"],
+        "branch_pass_count": result["branch_pass_count"],
+        "error_yield_wilson_95_percent": result[
+            "error_yield_wilson_95_percent"
+        ],
+        "branch_yield_wilson_95_percent": result[
+            "branch_yield_wilson_95_percent"
+        ],
         "mean_max_error_c": result["max_abs_error_c"]["mean"],
         "p95_max_error_c": result["max_abs_error_c"]["p95"],
         "worst_max_error_c": result["max_abs_error_c"]["worst"],

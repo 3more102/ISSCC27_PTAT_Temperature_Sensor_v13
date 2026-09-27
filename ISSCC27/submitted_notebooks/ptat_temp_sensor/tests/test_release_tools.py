@@ -11,6 +11,7 @@ import pdk_calibration_analysis
 import readout_budget
 import run_sky130
 import sizing_candidate_qualification
+import submission_preflight
 import mismatch_sizing_study
 
 
@@ -63,6 +64,11 @@ def test_behavioral_readout_budget_passes():
         r["worst_quantized_pwl_sampled_error_c"]
         <= r["quantized_sampled_grid_target_c"]
     )
+
+
+def test_statistical_release_contract_is_explicit():
+    ok, errors = submission_preflight.check_statistical_release_contract()
+    assert ok, errors
 
 
 def test_notebook_submission_structure_is_explicit():
@@ -124,6 +130,24 @@ def test_mismatch_sizing_preserves_operating_ratios_and_scales_area():
         mismatch_sizing_study.active_device_area_um2(scaled)
         > mismatch_sizing_study.active_device_area_um2(base)
     )
+
+
+def test_alternate_sizing_study_uses_canonical_wilson_interval():
+    summary = {
+        "samples": 100,
+        "per_sample": [
+            {
+                "pass_error_target": index < 98,
+                "pass_branch_mismatch_target": index < 100,
+            }
+            for index in range(100)
+        ],
+    }
+    mismatch_sizing_study.enrich_yield_intervals(summary)
+    assert summary["error_pass_count"] == 98
+    assert summary["branch_pass_count"] == 100
+    assert summary["error_yield_wilson_95_percent"][0] < 95.0
+    assert summary["branch_yield_wilson_95_percent"][0] > 95.0
 
 
 def test_mismatch_sizing_candidate_score_prioritizes_yield_deficit():
@@ -188,8 +212,8 @@ def test_sizing_candidate_qualification_requires_both_mismatch_and_dense_pass():
         "status": "PASS",
         "samples": 100,
         "seed_start": 9001,
-        "error_yield_percent": 97.0,
-        "branch_yield_percent": 96.0,
+        "error_yield_percent": 100.0,
+        "branch_yield_percent": 100.0,
         "headroom_pass": True,
         "min_sensor_headroom_v": 0.5,
     }

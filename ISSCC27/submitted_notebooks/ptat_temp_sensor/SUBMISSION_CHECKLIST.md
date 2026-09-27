@@ -28,6 +28,7 @@ Verified on 2026-09-26.
 - [x] New dense-grid transistor simulation completed and retained: 5 °C TT/FF/SS grid, worst five-point PWL error 0.472 °C, target PASS.
 - [x] Real PDK local-mismatch Monte Carlo completed and retained: 100 seeds; current five-point release design FAILS internal statistical targets (66% error yield, 4% branch-mismatch yield).
 - [x] Retrospective two-fold calibration robustness study retained: both 50-seed folds independently select the same six-point schedule; opposite-fold error yield is 49/50 (98%) in each direction. This is not promoted as an independent Monte-Carlo confirmation and does not erase the branch-mismatch failure.
+- [x] Statistical promotion gate distinguishes observed yield from confidence: a sizing candidate requires the two-sided 95% Wilson lower bound to meet the 95% target for both error yield and branch-matching yield.
 - [ ] Layout/DRC/LVS/PEX: optional for Code-a-Chip and not currently claimed.
 - [ ] Create/fetch the user fork of `sscs-ose/sscs-ose-code-a-chip.github.io`.
 - [ ] Copy/update only this project directory in the competition fork; do not copy this repository's `.github/` workflows into the upstream competition PR.
