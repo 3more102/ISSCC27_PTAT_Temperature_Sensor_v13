@@ -158,19 +158,25 @@ def main() -> int:
             raise RuntimeError(
                 "exact SKY130 revision unavailable; set SKY130_PDK_REVISION"
             )
-        candidates = []
-        for iref_scale in iref_scales:
-            for mirror_scale in mirror_scales:
-                for sensor_scale in sensor_scales:
-                    tag = (
-                        f"i{iref_scale:g}_m{mirror_scale:g}"
-                        f"_s{sensor_scale:g}"
-                    )
-                    out = args.output_dir / tag
-                    seeds = [
-                        args.seed_start + idx
-                        for idx in range(args.samples_per_candidate)
-                    ]
+    except Exception as exc:
+        print(f"MISMATCH SIZING SWEEP: FAIL: {exc}", file=sys.stderr)
+        return 1
+
+    candidates = []
+    invalid_candidates = []
+    for iref_scale in iref_scales:
+        for mirror_scale in mirror_scales:
+            for sensor_scale in sensor_scales:
+                tag = (
+                    f"i{iref_scale:g}_m{mirror_scale:g}"
+                    f"_s{sensor_scale:g}"
+                )
+                out = args.output_dir / tag
+                seeds = [
+                    args.seed_start + idx
+                    for idx in range(args.samples_per_candidate)
+                ]
+                try:
                     with ThreadPoolExecutor(
                         max_workers=args.jobs
                     ) as pool:
@@ -197,6 +203,7 @@ def main() -> int:
                     candidates.append(
                         {
                             "candidate": tag,
+                            "simulation_status": "VALID",
                             "iref_scale": iref_scale,
                             "mirror_linear_scale": mirror_scale,
                             "mirror_area_scale": mirror_scale**2,
@@ -205,8 +212,28 @@ def main() -> int:
                             **candidate_metrics(result, files),
                         }
                     )
-    except Exception as exc:
-        print(f"MISMATCH SIZING SWEEP: FAIL: {exc}", file=sys.stderr)
+                except Exception as exc:
+                    invalid = {
+                        "candidate": tag,
+                        "simulation_status": "INVALID",
+                        "iref_scale": iref_scale,
+                        "mirror_linear_scale": mirror_scale,
+                        "mirror_area_scale": mirror_scale**2,
+                        "sensor_linear_scale": sensor_scale,
+                        "sensor_area_scale": sensor_scale**2,
+                        "failure_reason": str(exc),
+                    }
+                    invalid_candidates.append(invalid)
+                    print(
+                        f"MISMATCH SIZING SWEEP: INVALID {tag}: {exc}",
+                        file=sys.stderr,
+                    )
+
+    if not candidates:
+        print(
+            "MISMATCH SIZING SWEEP: FAIL: no candidate completed simulation",
+            file=sys.stderr,
+        )
         return 1
 
     ranked = sorted(
@@ -294,6 +321,8 @@ def main() -> int:
             "p95 branch mismatch, and worst power"
         ),
         "candidates": ranked,
+        "invalid_candidates": invalid_candidates,
+        "invalid_candidate_count": len(invalid_candidates),
         "recommended_for_independent_validation": best,
         "independent_validation": validation,
         "headroom_qualified_candidate_found": best is not None,
